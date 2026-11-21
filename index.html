@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071b1b" />
+    <title>Fish Video</title>
+    <link rel="icon" type="image/png" href="assets/fish-video-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="editor.css" />
+    <script type="module" src="app.js"></script>
+    <script type="module" src="editor.js"></script>
+  </head>
+  <body>
+    <div class="startup-loading" id="startup-loading" role="status" aria-live="polite">
+      <div class="loading-card">
+        <div class="loading-mark">F</div>
+        <strong id="loading-title">Starting Fish Video</strong>
+        <span id="loading-detail">Preparing the workspace…</span>
+        <div class="loading-track"><i id="loading-progress"></i></div>
+      </div>
+    </div>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="assets/fish-video-icon.png" alt="" class="brand-icon" />
+          <span>Fish Video</span>
+        </div>
+        <nav class="tabs" aria-label="Main navigation" role="tablist">
+          <button class="tab active" id="tab-versions" role="tab" aria-selected="true" aria-controls="panel-versions">Versions</button>
+          <button class="tab" id="tab-plugins" role="tab" aria-selected="false" aria-controls="panel-plugins" tabindex="-1">Plug-Ins</button>
+          <button class="tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings" tabindex="-1">Settings</button>
+        </nav>
+        <button class="about-button" id="about-open" aria-label="About Fish Video" aria-haspopup="dialog" aria-expanded="false">
+          <span aria-hidden="true">i</span>
+        </button>
+      </header>
+
+      <section class="tab-panel chooser" id="panel-versions" role="tabpanel" aria-labelledby="tab-versions">
+        <div class="eyebrow"><span class="pulse"></span> READY WHEN YOU ARE</div>
+        <h1>Choose a version</h1>
+        <p class="subhead">Pick a version to continue.</p>
+
+        <form id="version-form">
+          <label for="version">Version</label>
+          <div class="version-choice">
+            <div class="select-wrap">
+              <select id="version" name="version" required>
+                <option value="" selected disabled>Select a version</option>
+                <option value="1" data-release="1.0">Audio 1.0a (Build 177)</option>
+                <option value="2" data-release="2.0">Audio 2.0a (Build 302)</option>
+                <option value="3" data-release="2.0">Video 2.0g (Build 415)</option>
+                <option value="4" data-release="3.0">Audio 3.0 (Build 107)</option>
+                <option value="5" data-release="3.0">Video 3.0c (Build 138)</option>
+                <option value="6" data-release="4.0">Video 4.0b (Build 239)</option>
+                <option value="7" data-release="4.0">Video 4.0e (Build 244)</option>
+                <option value="8" data-release="5">Video 5.0 (Build 310)</option>
+                <option value="9" data-release="6">Video 6.0 (Build 420)</option>
+                <option value="10" data-release="7">Video 7.0e (Build 522)</option>
+              </select>
+              <span class="chevron" aria-hidden="true">⌄</span>
+            </div>
+            <img class="version-icon" id="version-icon" src="assets/version-icon-1-to-3.png" alt="Version 1.0 to 3.0 icon" hidden />
+          </div>
+          <button type="submit">Select version <span aria-hidden="true">→</span></button>
+        </form>
+
+        <div class="notice" id="notice" aria-live="polite">
+          <span class="notice-dot"></span>
+          <span>Thank you for visiting!</span>
+        </div>
+      </section>
+      <section class="tab-panel simple-panel" id="panel-plugins" role="tabpanel" aria-labelledby="tab-plugins" hidden>
+        <div class="eyebrow"><span class="pulse"></span> FISH VIDEO</div>
+        <h1>Plug-Ins</h1>
+        <form id="code-form">
+          <div class="plugin-fields" id="plugin-fields">
+            <div class="plugin-field">
+              <label for="code-type">Code</label>
+              <div class="select-wrap">
+                <select id="code-type" name="code-type">
+                  <option value="" selected disabled>Select code type</option>
+                  <option value="directx-legacy">DirectX (Legacy)</option>
+                  <option value="ofx">OFX</option>
+                  <option value="codex-fish-plugins">CodeX (Fish Plug-ins)</option>
+                  <option value="vst-audio">VST (Audio)</option>
+                </select>
+                <span class="chevron" aria-hidden="true">⌄</span>
+              </div>
+            </div>
+            <div class="plugin-field" id="mode-field" hidden>
+              <label for="plugin-mode">Mode</label>
+              <div class="select-wrap">
+                <select id="plugin-mode" name="plugin-mode">
+                  <option value="" selected disabled>Select mode</option>
+                  <option value="classic-x86">Classic (x86)</option>
+                  <option value="modern-x64">Modern (x64)</option>
+                </select>
+                <span class="chevron" aria-hidden="true">⌄</span>
+              </div>
+            </div>
+          </div>
+          <p class="plugin-compatibility-note" id="vst-compatibility-note" hidden>VST is supported starting with Audio 3.0 and Video 3.0c.</p>
+          <p class="plugin-compatibility-note" id="architecture-compatibility-note" hidden></p>
+        </form>
+        <div class="plugin-tile-grid">
+          <div class="wax-plugin-area vst-plugin-area" id="vst-plugin-area" hidden>
+            <button type="button" class="plugin-tile vst-plugin-tile" id="vst-plugin-tile" aria-haspopup="dialog" aria-expanded="false" aria-controls="wax-picker" title="Install Image-Line VST">
+              <span id="vst-plugin-name">Image-Line</span>
+              <small id="vst-plugin-architecture">VST · Modern (x64)</small>
+            </button>
+          </div>
+          <div id="wax-plugin-area" class="wax-plugin-area" hidden>
+            <button type="button" class="plugin-tile" id="wax-toggle" aria-expanded="false" aria-controls="wax-picker">
+              <img src="assets/wax-plugin.png" alt="" />
+              <span>Wax Plug-in</span>
+            </button>
+          </div>
+          <div id="sapphire-plugin-area" class="wax-plugin-area sapphire-plugin-area" hidden>
+            <button type="button" class="plugin-tile" id="sapphire-toggle" aria-expanded="false" aria-controls="wax-picker">
+              <img src="assets/genarts-sapphire.png" alt="" />
+              <span>GenArts Sapphire</span>
+            </button>
+          </div>
+          <div class="wax-plugin-area" id="codex-plugin-area" hidden><button type="button" class="plugin-tile" id="codex-distortion-toggle"><img src="assets/distortion-icon.png" alt="" /><span>Distortion for x86 and x64<small id="codex-distortion-state">CodeX effect plug-in</small></span></button></div>
+        </div>
+        <p class="plugin-compatibility-note sapphire-note" id="sapphire-x86-note" hidden>Choose one OFX x86 version at a time; these versions share the S_ plug-in effects.</p>
+        <section class="installed-list" id="installed-wax-section" aria-label="Installed plug-in versions" hidden>
+          <h2>Installed versions</h2>
+          <ul id="installed-wax-list"></ul>
+        </section>
+      </section>
+      <section class="tab-panel simple-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+        <div class="eyebrow"><span class="pulse"></span> FISH VIDEO</div>
+        <h1>Global Settings</h1>
+        <p class="subhead">Settings here apply to all versions.</p>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label for="appearance-setting">Appearance</label>
+            <div class="select-wrap">
+              <select id="appearance-setting" name="appearance">
+                <option value="light">Light</option>
+                <option value="dark" selected>Dark</option>
+                <option value="green">Green</option>
+                <option value="custom">Custom</option>
+              </select>
+              <span class="chevron" aria-hidden="true">⌄</span>
+            </div>
+            <label class="custom-color-field" id="custom-color-field" for="appearance-color">Accent color <input id="appearance-color" type="color" value="#a3ff47" /></label>
+          </div>
+          <div class="settings-field modern-mode-field"><label for="modern-mode-setting">Modern mode</label><input id="modern-mode-setting" type="checkbox" /></div>
+          <div class="settings-field" id="brightness-field" hidden>
+            <label for="brightness-setting">Brightness</label>
+            <div class="select-wrap">
+              <select id="brightness-setting" name="brightness">
+                <option value="light">Light</option>
+                <option value="medium" selected>Medium</option>
+                <option value="dark">Dark</option>
+              </select>
+              <span class="chevron" aria-hidden="true">⌄</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="modal-backdrop" id="about-backdrop" hidden>
+        <section class="about-dialog" id="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title">
+          <div class="dialog-heading">
+            <div>
+              <div class="eyebrow"><span class="pulse"></span> FISH VIDEO</div>
+              <h2 id="about-title">About</h2>
+            </div>
+            <button class="close-button" id="about-close" aria-label="Close about">×</button>
+          </div>
+          <div class="credits">
+            <div class="credit-row">
+              <img class="credit-avatar" src="assets/cat.png" alt="" />
+              <div class="credit-copy"><span class="credit-role">Creator</span><span class="credit-name">FishyTheBlox</span></div>
+            </div>
+            <div class="credit-row">
+              <img class="credit-avatar" src="assets/bautuber.jpg" alt="" />
+              <div class="credit-copy"><span class="credit-role">Manager</span><span class="credit-name">BauTuber</span></div>
+            </div>
+            <div class="credit-row" id="visitor-credit">
+              <div class="credit-avatar visitor-avatar" id="visitor-avatar" aria-label="Your avatar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+              </div>
+              <div class="credit-copy"><span class="credit-role">Visitor</span><span class="credit-name">You</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="wax-version-overlay" id="wax-picker" hidden>
+          <div class="wax-version-popover" role="dialog" aria-modal="true" aria-label="Choose plug-in version">
+          <div class="select-wrap">
+            <select id="wax-version" name="wax-version" aria-label="Wax Plug-in version">
+              <option value="" selected disabled>Select a version</option>
+            </select>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </div>
+        </div>
+      </div>
+      <div class="waterline" aria-hidden="true"><span></span><span></span><span></span></div>
+    </main>
+    <main class="editor-workspace" id="editor-workspace" aria-label="Fish Video editing workspace" hidden>
+      <header class="editor-titlebar">
+        <div class="editor-brand"><img id="editor-version-icon" src="assets/version-icon-1-to-3.png" alt="Fish Video version 1.0 to 3.0" /><strong>Fish Video</strong><span class="editor-version" id="editor-version">Audio 1.0a (Build 177)</span></div>
+        <div class="project-name"><span id="project-name-label">Untitled Project</span> <span>●</span></div>
+        <button class="editor-back" id="editor-back" type="button">‹ Versions</button>
+      </header>
+      <nav class="editor-menubar" aria-label="Editor menu">
+        <button type="button" data-menu="File">File</button><button type="button" data-menu="Edit">Edit</button><button type="button" data-menu="View">View</button><button type="button" data-menu="Insert">Insert</button><button type="button" data-menu="Tools">Tools</button><button type="button" data-menu="Options">Options</button><button type="button" data-menu="Help">Help</button>
+      </nav>
+      <div class="editor-toolbar" aria-label="Editing tools">
+        <button type="button" title="New project" data-action="new">＋</button><button type="button" title="Open project" data-action="open">▱</button><button type="button" title="Save project" data-action="save">▣</button><button type="button" id="render-video-button" title="Render video">Render</button><span class="toolbar-divider"></span><button type="button" title="Undo" data-action="undo">↶</button><button type="button" title="Redo" data-action="redo">↷</button><span class="toolbar-divider"></span><button type="button" class="tool-active" title="Selection tool" data-action="select-tool">↖</button><button type="button" title="Split tool" data-action="split-tool">⌁</button>
+        <div class="toolbar-spacer"></div><span class="project-format" id="project-format">1280 × 720 · 60 fps</span>
+      </div>
+
+      <section class="editor-upper">
+        <aside class="media-dock">
+          <div class="dock-tabs" aria-label="Media panels">
+            <button class="dock-tab active" id="project-library-tab" type="button">Project Media</button><button class="dock-tab" type="button">Audio FX</button><button class="dock-tab video-only-tab" id="video-fx-tab" type="button">Video FX</button><button class="dock-tab video-only-tab" id="transitions-tab" type="button">Transitions</button>
+          </div>
+          <div class="media-toolbar"><strong id="project-library-heading">Project Media</strong><button type="button" id="import-media">＋ Import Media</button><input id="media-files" type="file" accept="video/*,audio/*,image/*" multiple hidden /></div>
+          <div class="media-grid" id="media-grid">
+            <div class="media-empty"><div class="empty-icon">＋</div><span id="project-library-empty-label">Your project media will appear here</span><button type="button" id="empty-import">Import Media</button></div>
+          </div>
+          <div class="transitions-browser" id="transitions-browser" hidden><p class="video-fx-browser-hint">Select a video event, then add a transition.</p><div class="transition-buttons"><button type="button" data-transition="fadeIn">Fade In</button><button type="button" data-transition="crossfade">Cross Dissolve</button><button type="button" data-transition="wipe">Wipe In</button><button type="button" data-transition="fadeOut">Fade Out</button></div></div>
+          <div class="audio-fx-browser" id="audio-fx-browser" hidden>
+            <p class="audio-fx-browser-hint" id="audio-fx-browser-hint">Select an audio event to add effects.</p>
+            <div class="audio-fx-buttons" id="audio-fx-buttons" aria-label="Audio effects">
+              <button type="button" data-fx="volume">Volume</button><button type="button" data-fx="bass">Bass</button><button type="button" data-fx="treble">Treble</button><button type="button" data-fx="reverb">Reverb</button><button type="button" data-fx="delay">Delay</button><button type="button" data-fx="vibrato">Vibrato</button><button type="button" data-fx="distortion">Distortion</button><button type="button" data-fx="chorus">Chorus</button><button type="button" data-fx="flange">Flange</button><button type="button" data-fx="pan">Pan</button><button type="button" data-fx="smooth">Smooth/Enhance</button><button type="button" data-fx="waveHammer">Wave Hammer Surround</button>
+            </div>
+            <section class="vst-fx-browser" id="vst-fx-browser" hidden>
+              <div id="vst-fx-buttons" aria-label="Installed VST audio plug-ins"></div>
+            </section>
+            <div class="audio-fx-chain" id="audio-fx-chain" aria-label="Added audio effects"></div>
+          </div>
+          <div class="video-fx-browser" id="video-fx-browser" hidden>
+            <p class="video-fx-browser-hint" id="video-fx-browser-hint">Select a video event, then choose an effect.</p>
+            <div class="video-fx-buttons" id="video-fx-buttons" aria-label="Vegas video effects"></div>
+            <button class="keyframe-add" type="button" data-keyframe-add="video-fx">◆ Add / update keyframe</button>
+            <section class="video-fx-plugin-browser" id="directx-fx-browser" hidden>
+              <h3>DirectX Plug-ins</h3>
+              <div class="video-fx-buttons" id="directx-fx-buttons" aria-label="Installed DirectX plug-ins"></div>
+              <p class="video-fx-plugin-empty" id="directx-fx-empty" hidden>No DirectX plug-ins installed.</p>
+            </section>
+            <section class="video-fx-plugin-browser" id="codex-fx-browser" hidden><h3>CodeX (Fish Plug-Ins)</h3><div class="video-fx-buttons" id="codex-fx-buttons"></div></section>
+          </div>
+        </aside>
+        <section class="preview-dock">
+          <div class="preview-toolbar"><strong id="preview-title">Video Preview</strong><label class="preview-setting">Preview <select id="preview-quality"><option>Auto</option><option>Draft</option><option>Preview</option><option>Good</option><option>Best</option></select></label><label class="preview-setting">Zoom <select id="preview-zoom"><option>25%</option><option>50%</option><option>75%</option><option selected>100%</option><option>150%</option><option>200%</option></select></label><button type="button" title="Full screen preview">⛶</button></div>
+          <div class="preview-stage" id="preview-stage">
+            <div class="preview-empty" id="preview-empty"><div class="preview-mark">F</div><span id="preview-empty-label">Video Preview</span></div>
+            <video id="preview-video" playsinline hidden></video>
+            <img id="preview-image" alt="Media preview" hidden />
+            <img class="sapphire-watermark-overlay" id="sapphire-watermark-overlay" alt="" aria-hidden="true" hidden />
+            <div class="audio-preview" id="audio-preview" hidden><div class="audio-disc">♪</div><span id="audio-preview-name"></span><audio id="preview-audio" hidden></audio></div>
+          </div>
+          <div class="preview-footer"><span id="project-description">Project: 1280×720 · 60p · 48 kHz/16-bit</span><span class="frame-readout">Frame: <b id="preview-frame">0</b></span><span id="preview-display">Display: 1280×720</span></div>
+        </section>
+        <aside class="master-dock"><div class="master-label">MASTER<br /><span>● M S</span></div><button class="master-fx-button" id="master-fx-button" type="button" title="Master FX">FX</button><div class="meter-pair"><div class="meter"><i></i></div><div class="meter"><i></i></div></div><div class="meter-scale">0<br>−6<br>−12<br>−18<br>−24<br>−36</div></aside>
+      </section>
+
+      <section class="timeline-dock" aria-label="Timeline">
+        <div class="timeline-heading"><div class="time-readout" id="time-readout" title="Right-click to change time display">00:00:00.000</div><label class="timeline-zoom" title="Timeline zoom">Zoom <select id="timeline-zoom-control" aria-label="Timeline zoom"></select></label></div>
+        <div class="timeline-ruler"><div class="ruler-spacer"></div><div class="ruler-scale" id="ruler-scale"></div></div>
+        <div class="timeline-body">
+          <div class="track-labels" id="track-labels">
+            <div class="track-label video-track-label" data-track-id="video-1"><b>▣　Video Track 1</b><span><button type="button" class="track-mute" title="Mute track">M</button><button type="button" class="track-solo" title="Solo track">S</button></span><i class="track-resize" title="Resize track"></i></div>
+            <div class="track-label audio-track-label" data-track-id="audio-1"><b>♫　Audio Track 1</b><span><button type="button" class="track-mute" title="Mute track">M</button><button type="button" class="track-solo" title="Solo track">S</button></span><i class="track-resize" title="Resize track"></i></div>
+          </div>
+          <div class="track-canvas" id="track-canvas">
+            <div class="track-lane video-lane" id="video-lane" data-track-id="video-1"><span class="lane-hint">Drag video or image media here</span></div>
+            <div class="track-lane audio-lane" id="audio-lane" data-track-id="audio-1"><span class="lane-hint">Drag audio media here</span></div>
+            <div class="playhead" id="playhead"><span></span></div>
+          </div>
+        </div>
+        <div class="transport-bar"><div class="transport-left"><span>Rate: <b id="playback-rate">1.00</b></span><button type="button" title="Go to start" id="go-start">|◀</button><button type="button" title="Previous frame" id="previous-frame">◀</button><button type="button" class="play-button" id="play-button" title="Play" aria-label="Play">▶</button><button type="button" title="Next frame" id="next-frame">▶|</button><button type="button" title="Go to end" id="go-end">▶▶|</button></div><span class="transport-status" id="transport-status">Stopped</span><span class="project-length">Project length: 00:00:00:00</span></div>
+      </section>
+      <section class="audio-fx-panel event-properties-panel" id="event-properties-panel" aria-label="Event properties" hidden>
+        <div class="audio-fx-heading" id="event-properties-drag-handle"><strong>Audio Event Properties</strong><button type="button" id="close-event-properties" aria-label="Close event properties">×</button></div>
+        <p class="fx-target" id="fx-target">Built-in effects · no VST required</p>
+        <div class="pitch-settings">
+          <label id="speed-control-wrap" for="speed-amount" hidden>Speed <output id="speed-value">1.00× · +0.0 st</output></label>
+          <input id="speed-amount" type="range" min="25" max="400" value="100" step="1" hidden />
+          <label id="pitch-method-label" for="pitch-method">Time stretch / pitch shift</label>
+          <select id="pitch-method"><option value="classic">Classic</option><option value="elastique" hidden>élastique</option></select>
+          <label id="stretch-label" for="stretch-attributes" hidden>Stretch attributes</label>
+          <select id="stretch-attributes" hidden><option>Pro</option><option>Efficient</option><option>Soloist (Monophonic)</option><option>Soloist (Speech)</option></select>
+          <label id="pitch-amount-label" class="pitch-wide" for="pitch-amount">Pitch</label>
+          <div class="pitch-pair pitch-wide" id="pitch-pair">
+            <label for="pitch-amount">Semitones <output id="pitch-value">0 st</output><input id="pitch-amount" type="number" min="-12" max="12" value="0" step="1" /></label>
+            <label for="pitch-cents">Cents <output id="pitch-cents-value">0 ¢</output><input id="pitch-cents" type="number" min="-99" max="99" value="0" step="1" /></label>
+          </div>
+          <p class="classic-note" id="classic-note">Classic changes playback speed and pitch together.</p>
+        </div>
+      </section>
+      <section class="audio-fx-panel" id="audio-fx-panel" aria-label="Audio effects" hidden>
+        <div class="audio-fx-heading" id="audio-fx-drag-handle"><strong id="audio-fx-panel-title">Audio Event FX</strong><button type="button" id="close-audio-fx" aria-label="Close audio effects">×</button></div>
+        <p class="fx-target" id="audio-fx-target">Built-in effects · no VST required</p>
+        <h3 class="fx-chain-heading">Effect chain</h3>
+        <div class="fx-chain-list" id="fx-chain-list"></div>
+        <fieldset class="wave-hammer-settings" id="wave-hammer-settings" hidden>
+          <legend>Wave Hammer Surround</legend>
+          <label for="wave-hammer-limit">dB limit <output id="wave-hammer-limit-value">−12 dB</output></label>
+          <input id="wave-hammer-limit" type="range" min="-24" max="12" value="-12" step="1" />
+          <label for="wave-hammer-strength">Strength <output id="wave-hammer-strength-value">0.5</output></label>
+          <input id="wave-hammer-strength" type="range" min="0" max="1" value="0.5" step="0.05" />
+          <p class="wave-hammer-note">Noise cleanup strength, not bitrate. 0 leaves fuzzy noise; 1 gives strongest cleanup and may use more CPU.</p>
+          <label class="wave-hammer-check"><input id="wave-hammer-apply" type="checkbox" checked /> Apply</label>
+          <div class="wave-hammer-channels"><label><input id="wave-hammer-left" type="checkbox" checked /> Left</label><label><input id="wave-hammer-right" type="checkbox" checked /> Right</label></div>
+        </fieldset>
+      </section>
+      <section class="audio-fx-panel video-event-fx-panel" id="video-event-fx-panel" aria-label="Video Event FX" hidden>
+        <div class="audio-fx-heading" id="video-event-fx-drag-handle"><strong>Video Event FX</strong><button type="button" id="close-video-event-fx" aria-label="Close video effects">×</button></div>
+        <p class="fx-target" id="video-event-fx-target">Select a video event to manage its effects.</p>
+        <h3 class="fx-chain-heading">Effect chain</h3>
+        <div class="video-fx-chain video-event-fx-chain" id="video-fx-chain" aria-label="Video event effect chain"></div>
+        <section class="codex-distortion-ui" id="codex-distortion-ui" aria-label="Distortion effects" hidden><h3>Distortion for x86 and x64</h3><div id="codex-distortion-controls"></div></section>
+      </section>
+      <section class="audio-fx-panel pan-crop-panel" id="pan-crop-panel" aria-label="Pan/Crop" hidden>
+        <div class="audio-fx-heading" id="pan-crop-drag-handle"><strong>Pan/Crop</strong><button type="button" id="close-pan-crop" aria-label="Close Pan/Crop">×</button></div>
+        <p class="fx-target" id="pan-crop-target">Adjust the framing of this event.</p>
+        <div class="pan-crop-controls">
+          <div class="pan-crop-canvas" id="pan-crop-canvas" aria-label="Pan and crop framing workspace"><div class="pan-crop-safe-frame"><div class="pan-crop-box" id="pan-crop-box" role="slider" tabindex="0" aria-label="Crop frame; drag to reposition, drag corner to resize"><i></i><i></i><i></i><i></i></div></div></div>
+          <div class="pan-crop-tools"><button class="keyframe-add" type="button" data-keyframe-add="pan-crop">◆ Add / update keyframe</button><label for="pan-crop-zoom-number">Zoom</label><div><button type="button" id="pan-crop-zoom-out" aria-label="Zoom out">−</button><input id="pan-crop-zoom-number" type="number" min="25" max="400" step="1" value="100" aria-label="Zoom percent" /><span>%</span><button type="button" id="pan-crop-zoom-in" aria-label="Zoom in">+</button></div><span class="pan-crop-position"><output id="pan-crop-x-value">X 0%</output><output id="pan-crop-y-value">Y 0%</output></span><label for="pan-crop-rotation">Rotate</label><input id="pan-crop-rotation" type="range" min="-180" max="180" value="0" step="1" /><output id="pan-crop-rotation-value">0°</output></div>
+          <label class="video-fx-control pan-crop-legacy" for="pan-crop-zoom"><span>Zoom</span><output id="pan-crop-zoom-value">100%</output><input id="pan-crop-zoom" type="range" min="25" max="400" value="100" step="1" /></label>
+          <label class="video-fx-control pan-crop-legacy" for="pan-crop-x"><span>Pan horizontal</span><input id="pan-crop-x" type="range" min="-100" max="100" value="0" step="1" /></label>
+          <label class="video-fx-control pan-crop-legacy" for="pan-crop-y"><span>Pan vertical</span><input id="pan-crop-y" type="range" min="-100" max="100" value="0" step="1" /></label>
+        </div>
+      </section>
+      <div class="grid-spacing-backdrop" id="grid-spacing-backdrop" hidden>
+        <section class="grid-spacing-dialog" role="dialog" aria-modal="true" aria-labelledby="grid-spacing-title">
+          <div class="audio-fx-heading"><strong id="grid-spacing-title">Grid spacing</strong><button type="button" id="close-grid-spacing" aria-label="Close grid spacing">×</button></div>
+          <label class="grid-tempo" for="grid-tempo">Tempo <span><input id="grid-tempo" type="number" min="20" max="300" step="1" value="120" /> BPM</span></label>
+          <h3>Ruler marks</h3>
+          <div class="grid-spacing-choices" id="time-grid-choices">
+            <button type="button" data-grid="minutes">Minutes</button><button type="button" data-grid="seconds">Seconds</button><button type="button" data-grid="milliseconds">Milliseconds</button><button type="button" data-grid="frames">Frames</button>
+          </div>
+          <hr />
+          <h3>Musical spacing</h3>
+          <div class="grid-spacing-choices" id="music-grid-choices">
+            <button type="button" data-grid="measures">Measures</button><button type="button" data-grid="quarter">Quarter notes</button><button type="button" data-grid="quarter-triplet" data-triplet>Quarter note triplets</button>
+            <button type="button" data-grid="eighth">Eighth notes</button><button type="button" data-grid="eighth-triplet" data-triplet>Eighth note triplets</button>
+            <button type="button" data-grid="sixteenth">Sixteenth notes</button><button type="button" data-grid="sixteenth-triplet" data-triplet>Sixteenth note triplets</button>
+            <button type="button" data-grid="thirty-second">32nd notes</button><button type="button" data-grid="thirty-second-triplet" data-triplet>32nd note triplets</button>
+          </div>
+        </section>
+      </div>
+      <div class="project-properties-backdrop" id="project-properties-backdrop" hidden>
+        <section class="project-properties-dialog" role="dialog" aria-modal="true" aria-labelledby="project-properties-title">
+          <div class="audio-fx-heading"><strong id="project-properties-title">Project Properties</strong><button type="button" id="close-project-properties" aria-label="Close project properties">×</button></div>
+          <div class="project-properties-tabs" role="tablist" aria-label="Project property groups">
+            <button type="button" class="selected" data-properties-tab="video">Video</button><button type="button" data-properties-tab="audio">Audio</button><button type="button" data-properties-tab="ruler">Ruler</button>
+          </div>
+          <div class="project-properties-fields" data-properties-panel="video">
+            <label>Frame size <span class="project-dimensions"><input id="project-width" type="number" min="16" max="8192" step="1" aria-label="Project width" /> × <input id="project-height" type="number" min="16" max="8192" step="1" aria-label="Project height" /></span></label>
+            <label for="project-frame-rate">Frame rate <span class="project-unit-input"><input id="project-frame-rate" type="number" min="1" max="240" step="0.001" /> fps</span></label>
+            <label for="project-pixel-aspect">Pixel stretch <span class="project-unit-input"><input id="project-pixel-aspect" type="number" min="0.1" max="10" step="0.001" /> : 1</span></label>
+            <label for="project-video-bitrate">Video bitrate <span class="project-unit-input"><input id="project-video-bitrate" type="number" min="0.1" max="200" step="0.1" /> Mbps</span></label>
+            <label for="project-hdr">HDR <select id="project-hdr"><option value="off">Off</option><option value="hdr10">HDR10</option><option value="hlg">HLG</option></select></label>
+            <label for="project-field-order">Field order <select id="project-field-order"><option value="progressive">Progressive scan</option><option value="upper">Upper field first</option><option value="lower">Lower field first</option></select></label>
+            <label for="project-render-quality">Full-resolution rendering quality <select id="project-render-quality"><option value="best">Best</option><option value="good">Good</option><option value="preview">Preview</option><option value="draft">Draft</option></select></label>
+          </div>
+          <div class="project-properties-fields" data-properties-panel="audio" hidden>
+            <label for="project-audio-rate">Sample rate <select id="project-audio-rate"><option value="32000">32,000 Hz</option><option value="41000">41,000 Hz</option><option value="44100">44,100 Hz</option><option value="48000">48,000 Hz</option><option value="88200">88,200 Hz</option><option value="96000">96,000 Hz</option><option value="192000">192,000 Hz</option></select></label>
+            <label for="project-audio-bits">Bit depth <select id="project-audio-bits"><option value="16">16-bit</option><option value="24">24-bit</option><option value="32">32-bit integer</option><option value="32f">32-bit floating point</option></select></label>
+            <label for="project-audio-bitrate">Audio bitrate <select id="project-audio-bitrate"><option>64</option><option>128</option><option>192</option><option>256</option><option>320</option><option>384</option><option>440</option><option>512</option></select> kbps
+          </div>
+          <div class="project-properties-fields" data-properties-panel="ruler" hidden>
+            <label for="project-tempo">Tempo <span class="project-unit-input"><input id="project-tempo" type="number" min="20" max="300" step="0.1" /> BPM</span></label>
+            <label for="project-time-format">Ruler time format <select id="project-time-format"><option value="time">Time</option><option value="seconds">Seconds</option><option value="frames">Frames</option><option value="time-and-frames">Time and Frames</option></select></label>
+          </div>
+          <div class="project-properties-actions"><button type="button" id="cancel-project-properties">Cancel</button><button type="button" id="apply-project-properties">Apply</button></div>
+        </section>
+      </div>
+      <input id="project-file" type="file" accept=".fvid" hidden />
+      <div class="editor-context-menu" id="editor-context-menu" role="menu" hidden></div>
+      <footer class="editor-status"><span>Ready</span><span>Fish Video　·　Project is saved locally in this session</span></footer>
+      <div class="exit-confirm-backdrop" id="exit-confirm" hidden>
+        <section class="exit-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="exit-confirm-title">
+          <h2 id="exit-confirm-title">Save this project before exiting?</h2>
+          <p>Your project changes may be lost if you don’t save.</p>
+          <div class="exit-confirm-actions">
+            <button type="button" id="exit-save-yes">Yes</button>
+            <button type="button" id="exit-save-no">No</button>
+            <button type="button" id="exit-save-cancel">Cancel</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
