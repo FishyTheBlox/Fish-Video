@@ -225,7 +225,14 @@
           <div class="media-grid" id="media-grid">
             <div class="media-empty"><div class="empty-icon">＋</div><span id="project-library-empty-label">Your project media will appear here</span><button type="button" id="empty-import">Import Media</button></div>
           </div>
-          <div class="transitions-browser" id="transitions-browser" hidden><p class="video-fx-browser-hint">Select a video event, then add a transition.</p><div class="transition-buttons"><button type="button" data-transition="fadeIn">Fade In</button><button type="button" data-transition="crossfade">Cross Dissolve</button><button type="button" data-transition="wipe">Wipe In</button><button type="button" data-transition="fadeOut">Fade Out</button></div></div>
+          <div class="transitions-browser" id="transitions-browser" hidden>
+            <p class="video-fx-browser-hint">Select a video event, then add a transition.</p>
+            <h3 class="transition-group-title">Classic</h3>
+            <div class="transition-buttons"><button type="button" data-transition="fadeIn">Fade In</button><button type="button" data-transition="crossfade">Cross Dissolve</button><button type="button" data-transition="wipe">Wipe In</button><button type="button" data-transition="fadeOut">Fade Out</button><button type="button" data-transition="slideLeft">Slide Left</button><button type="button" data-transition="slideRight">Slide Right</button><button type="button" data-transition="zoomIn">Zoom In</button><button type="button" data-transition="spin">Spin</button></div>
+            <h3 class="transition-group-title transition-3d-title">3D Transitions <span>Video 6.0+</span></h3>
+            <div class="transition-buttons"><button type="button" data-transition="flip3d" data-min-release="6">3D Flip</button><button type="button" data-transition="cube3d" data-min-release="6">3D Cube</button><button type="button" data-transition="pageTurn3d" data-min-release="6">3D Page Turn</button><button type="button" data-transition="carousel3d" data-min-release="6">3D Carousel</button><button type="button" data-transition="spin3d" data-min-release="6">3D Spin</button></div>
+            <p class="transition-release-note" id="transition-release-note" hidden>Available starting with Video 6.0.</p>
+          </div>
           <div class="audio-fx-browser" id="audio-fx-browser" hidden>
             <p class="audio-fx-browser-hint" id="audio-fx-browser-hint">Select an audio event to add effects.</p>
             <div class="audio-fx-buttons" id="audio-fx-buttons" aria-label="Audio effects">
