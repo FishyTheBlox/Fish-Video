@@ -23,7 +23,7 @@
     <main class="shell">
       <header class="topbar">
         <div class="brand">
-          <img src="assets/fish-video-icon.png" alt="" class="brand-icon" />
+          <img src="fish-video-icon.png" alt="" class="brand-icon" />
           <span>Fish Video</span>
         </div>
         <nav class="tabs" aria-label="Main navigation" role="tablist">
@@ -246,13 +246,13 @@
           <div class="video-fx-browser" id="video-fx-browser" hidden>
             <p class="video-fx-browser-hint" id="video-fx-browser-hint">Select a video event, then choose an effect.</p>
             <div class="video-fx-buttons" id="video-fx-buttons" aria-label="Vegas video effects"></div>
-            <button class="keyframe-add" type="button" data-keyframe-add="video-fx">◆ Add / update keyframe</button>
             <section class="video-fx-plugin-browser" id="directx-fx-browser" hidden>
               <h3>DirectX Plug-ins</h3>
               <div class="video-fx-buttons" id="directx-fx-buttons" aria-label="Installed DirectX plug-ins"></div>
               <p class="video-fx-plugin-empty" id="directx-fx-empty" hidden>No DirectX plug-ins installed.</p>
             </section>
             <section class="video-fx-plugin-browser" id="codex-fx-browser" hidden><h3>CodeX (Fish Plug-Ins)</h3><div class="video-fx-buttons" id="codex-fx-buttons"></div></section>
+            <section class="video-fx-plugin-browser" id="sapphire-plugin-browser" hidden><h3>Sapphire Plug-ins</h3><div class="video-fx-buttons" id="sapphire-plugin-buttons"></div><div class="video-fx-buttons sapphire-effect-buttons" id="sapphire-effect-buttons"></div></section>
           </div>
         </aside>
         <section class="preview-dock">
@@ -325,6 +325,7 @@
         <h3 class="fx-chain-heading">Effect chain</h3>
         <div class="video-fx-chain video-event-fx-chain" id="video-fx-chain" aria-label="Video event effect chain"></div>
         <section class="codex-distortion-ui" id="codex-distortion-ui" aria-label="Distortion effects" hidden><h3>Distortion for x86 and x64</h3><div id="codex-distortion-controls"></div></section>
+        <section class="codex-distortion-ui sapphire-event-ui" id="sapphire-event-ui" aria-label="Sapphire effects" hidden><h3>Sapphire effects <span id="sapphire-version-label"></span></h3><div id="sapphire-effect-controls"></div></section>
       </section>
       <section class="audio-fx-panel pan-crop-panel" id="pan-crop-panel" aria-label="Pan/Crop" hidden>
         <div class="audio-fx-heading" id="pan-crop-drag-handle"><strong>Pan/Crop</strong><button type="button" id="close-pan-crop" aria-label="Close Pan/Crop">×</button></div>
