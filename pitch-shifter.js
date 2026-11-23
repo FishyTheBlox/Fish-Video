@@ -25,15 +25,18 @@ class FishPitchShifter extends AudioWorkletProcessor {
     for (let channel = 0; channel < output.length; channel++) {
       if (!this.buffers[channel]) this.buffers[channel] = new Float32Array(this.bufferSize);
     }
+    
     for (let frame = 0; frame < frameCount; frame++) {
       const writePosition = (this.writeIndex + frame) % this.bufferSize;
       const secondPhase = (this.phase + 0.5) % 1;
+      
       for (let channel = 0; channel < output.length; channel++) {
         const ring = this.buffers[channel];
         const source = input[channel] || input[0];
         const destination = output[channel];
         const sample = source?.[frame] || 0;
         ring[writePosition] = sample;
+        
         if (!shifting) {
           destination[frame] = sample;
           continue;
@@ -50,8 +53,11 @@ class FishPitchShifter extends AudioWorkletProcessor {
           const weight = Math.sin(Math.PI * phase) ** 2;
           mixed += grain * weight;
         }
-        destination[frame] = mixed;
+
+        // Apply soft clipping (tanh) to tame constructive interference volume spikes naturally
+        destination[frame] = Math.tanh(mixed);
       }
+      
       if (shifting) this.phase = (this.phase + phaseStep) % 1;
     }
 
