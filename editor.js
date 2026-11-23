@@ -1,3 +1,5 @@
+import { runRenderClock } from './render.js';
+
 const editor = document.querySelector('#editor-workspace');
 const manager = document.querySelector('.shell');
 const versionLabel = document.querySelector('#editor-version');
@@ -16,6 +18,8 @@ const previewImage = document.querySelector('#preview-image');
 const sapphireWatermarkOverlay = document.querySelector('#sapphire-watermark-overlay');
 const previewStage = document.querySelector('.preview-stage');
 const videoFxCanvas = document.createElement('canvas');
+const videoFxLastGoodCanvas = document.createElement('canvas');
+let videoFxHasLastGoodFrame = false;
 videoFxCanvas.className = 'video-fx-canvas';
 videoFxCanvas.hidden = true;
 previewStage.append(videoFxCanvas);
@@ -24,17 +28,17 @@ function refreshSapphireWatermark(settings = activePreviewVideoFx) {
   activePreviewVideoFx = settings;
   const effects = new Set(settings?.effects || []);
   const unpatchedSapphire = effects.size
-    ? installedDirectxPlugins().reverse().find((entry) =>
-      (entry.isSapphire || entry.key?.startsWith('sapphire|')) &&
+    ? installedSapphirePlugins().reverse().find((entry) =>
+      (entry.isSapphire || /sapphire/i.test(entry.name || '')) &&
       !entry.patched &&
-      effects.has(`directx:${entry.key}`)
+      (effects.has(`directx:${entry.key}`) || effects.has(`sapphire:${entry.key}`))
     )
     : null;
   if (!unpatchedSapphire) {
     sapphireWatermarkOverlay.hidden = true;
     return;
   }
-  const version = Number(unpatchedSapphire.name?.match(/GenArts Sapphire\s+(\d+)/i)?.[1]) || 0;
+  const version = Number(unpatchedSapphire.name?.match(/Sapphire\s+(\d+)/i)?.[1]) || 0;
   const asset = version >= 9
     ? 'assets/genarts-sapphire-watermark-modern.png'
     : 'assets/genarts-sapphire-watermark-legacy.png';
@@ -92,10 +96,17 @@ const directxFxButtons = document.querySelector('#directx-fx-buttons');
 const directxFxEmpty = document.querySelector('#directx-fx-empty');
 const codexFxBrowser = document.querySelector('#codex-fx-browser');
 const codexFxButtons = document.querySelector('#codex-fx-buttons');
+const sapphirePluginBrowser = document.querySelector('#sapphire-plugin-browser');
+const sapphirePluginButtons = document.querySelector('#sapphire-plugin-buttons');
+const sapphireEffectButtons = document.querySelector('#sapphire-effect-buttons');
+const sapphireEventUi = document.querySelector('#sapphire-event-ui');
+const sapphireEffectControls = document.querySelector('#sapphire-effect-controls');
+const sapphireVersionLabel = document.querySelector('#sapphire-version-label');
 const codexDistortionUi = document.querySelector('#codex-distortion-ui');
 const codexDistortionControls = document.querySelector('#codex-distortion-controls');
 let selectedBrowserFx = null;
 let videoFxCanvasFrame = 0;
+let videoFxCanvasLastFrameAt = 0;
 let videoFxCanvasSource = null;
 let videoFxCanvasSettings = null;
 const projectNameLabel = document.querySelector('#project-name-label');
@@ -175,7 +186,7 @@ const BASE_PIXELS_PER_SECOND = 10;
 function defaultFx() { return { volume: 100, bass: 0, treble: 0, reverb: 0, delay: 0, vibrato: 0, distortion: 0, chorus: 0, flange: 0, pan: 0, smooth: 0, waveHammer: 0, effects: [], waveHammerSettings: { dbLimit: -12, strength: 0.5, apply: true, left: true, right: true }, speed: 100, pitch: 0, pitchCents: 0, method: 'classic', attributes: 'Pro' }; }
 function defaultVideoFx() {
   return {
-    effects: [], codexEffects: [], bendAmount: 0, cornerTopLeft: 0, cornerTopRight: 0, cornerBottomRight: 0, cornerBottomLeft: 0, flipMode: 'none', panRotation: 0, panFlipX: 1, panFlipY: 1, tileRotate: 0, tileShift: 0, kaleidoscopeSegments: 6, kaleidoscopeRotation: 0, kaleidoscopeSpeed: 0, squeezeAmount: 0, warpWaveAmount: 0, warpWaveAngle: 0, warpWaveSpeed: 0, warpWaveAxis: 'horizontal', panX: 0, panY: 0, panZoom: 100, brightness: 100, contrast: 100, saturation: 100, hue: 0, blur: 0, glow: 0, glowColor: '#ffffff', sharpen: 0,
+    effects: [], codexEffects: [], sapphireEffects: [], s_GlowIntensity: 50, s_BlurAmount: 10, s_ShakeAmplitude: 20, s_ShakeFrequency: 8, s_ShakeRGB: 0, s_LensFlareIntensity: 50, s_WarpBubbleAmount: 25, bendAmount: 0, cornerTopLeft: 0, cornerTopRight: 0, cornerBottomRight: 0, cornerBottomLeft: 0, flipMode: 'none', panRotation: 0, panFlipX: 1, panFlipY: 1, tileRotate: 0, tileShift: 0, kaleidoscopeSegments: 6, kaleidoscopeRotation: 0, kaleidoscopeSpeed: 0, squeezeAmount: 0, warpWaveAmount: 0, warpWaveAngle: 0, warpWaveSpeed: 0, warpWaveAxis: 'horizontal', panX: 0, panY: 0, panZoom: 100, brightness: 100, contrast: 100, saturation: 100, hue: 0, blur: 0, glow: 0, glowColor: '#ffffff', sharpen: 0,
     borderAmount: 3, channelBlend: 0, deform: 0, deformSqueeze: 0, deformShear: 0, deformCurve: 0, deformCenter: true, deformBackground: '#000000',
     deformLeft: true, deformRight: true, deformTop: true, deformBottom: true,
     deformShearHorizontal: true, deformShearVertical: true,
@@ -192,36 +203,73 @@ function defaultVideoFx() {
 }
 function interpolateVideoFx(clip, localTime) {
   const base = ensureVideoFx(clip);
-  const keys = [...(clip.keyframes || [])].sort((a,b)=>a.time-b.time);
+  const keys = [...(clip.keyframes || [])].sort((a, b) => a.time - b.time);
   if (!keys.length) return base;
   let left = keys[0], right = keys.at(-1);
-  for (let i=0;i<keys.length-1;i++) if (localTime >= keys[i].time && localTime <= keys[i+1].time) { left=keys[i]; right=keys[i+1]; break; }
-  if (localTime <= left.time) return { ...base, ...left.values };
-  if (localTime >= right.time || left === right) return { ...base, ...right.values };
-  let t = Math.max(0, Math.min(1, (localTime-left.time) / Math.max(.0001,right.time-left.time)));
-  const mode = left.easing || 'Linear';
-  if (mode==='Fast') t=t*t; else if (mode==='Slow') t=1-(1-t)*(1-t); else if (mode==='Smooth') t=t*t*(3-2*t); else if (mode==='Sharp') t=t<.5?0:1; else if (mode==='Hold') t=0;
-  const out={...base,...left.values};
-  for (const [key,end] of Object.entries(right.values || {})) {
-    const start=left.values?.[key] ?? base[key];
-    if (typeof start==='number' && typeof end==='number') out[key]=start+(end-start)*t;
-    else if (typeof start==='string' && /^#[0-9a-f]{6}$/i.test(start) && /^#[0-9a-f]{6}$/i.test(end)) { const a=[1,3,5].map(i=>parseInt(start.slice(i,i+2),16)),b=[1,3,5].map(i=>parseInt(end.slice(i,i+2),16)); out[key]='#'+a.map((v,i)=>Math.round(v+(b[i]-v)*t).toString(16).padStart(2,'0')).join(''); }
-    else out[key]=t<.5?start:end;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (localTime >= keys[i].time && localTime <= keys[i + 1].time) { left = keys[i]; right = keys[i + 1]; break; }
   }
-  return out;
+  const staticLists = { effects: base.effects, codexEffects: base.codexEffects, sapphireEffects: base.sapphireEffects };
+  if (localTime <= left.time) return { ...base, ...left.values, ...staticLists };
+  if (localTime >= right.time || left === right) return { ...base, ...right.values, ...staticLists };
+  let t = Math.max(0, Math.min(1, (localTime - left.time) / Math.max(.0001, right.time - left.time)));
+  const mode = left.easing || 'Linear';
+  if (mode === 'Fast') t *= t;
+  else if (mode === 'Slow') t = 1 - (1 - t) * (1 - t);
+  else if (mode === 'Smooth') t = t * t * (3 - 2 * t);
+  else if (mode === 'Sharp') t = t < .5 ? 0 : 1;
+  else if (mode === 'Hold') t = 0;
+  const out = { ...base, ...left.values };
+  for (const [key, end] of Object.entries(right.values || {})) {
+    if (key === 'effects' || key === 'codexEffects') continue;
+    const start = left.values?.[key] ?? base[key];
+    if (typeof start === 'number' && typeof end === 'number') out[key] = start + (end - start) * t;
+    else if (typeof start === 'string' && /^#[0-9a-f]{6}$/i.test(start) && /^#[0-9a-f]{6}$/i.test(end)) {
+      const ca = [1, 3, 5].map(i => parseInt(start.slice(i, i + 2), 16));
+      const cb = [1, 3, 5].map(i => parseInt(end.slice(i, i + 2), 16));
+      out[key] = '#' + ca.map((v, i) => Math.round(v + (cb[i] - v) * t).toString(16).padStart(2, '0')).join('');
+    } else out[key] = t < .5 ? start : end;
+  }
+  return { ...out, ...staticLists };
 }
 function addVideoKeyframe(kind) {
-  const found=selectedVideoClip(); if(!found){transportStatus.textContent='Select a video event first';return;}
-  const clip=found.clip; clip.keyframes ||= []; const local=Math.max(0,Math.min(Number(clip.duration)||0,timelineClockTime-(Number(clip.startTime)||0)));
-  const values={...interpolateVideoFx(clip,local)}; delete values.keyframes;
-  recordUndo(); const frame=Math.round(local*projectProperties.frameRate)/projectProperties.frameRate; const existing=clip.keyframes.find(k=>Math.abs(k.time-frame)<.5/projectProperties.frameRate);
-  if(existing) existing.values=values; else clip.keyframes.push({time:frame,values,easing:'Linear'});
-  clip.keyframes.sort((a,b)=>a.time-b.time); renderTracks(); transportStatus.textContent=`Keyframe set at ${formatRulerTime(frame)}`;
+  const found = selectedVideoClip();
+  if (!found) { transportStatus.textContent = 'Select a video event first'; return; }
+  const clip = found.clip;
+  const local = Math.max(0, Math.min(Number(clip.duration) || 0, timelineClockTime - (Number(clip.startTime) || 0)));
+  const values = { ...interpolateVideoFx(clip, local) };
+  delete values.effects; delete values.codexEffects; delete values.keyframes;
+  recordUndo();
+  const frame = Math.round(local * projectProperties.frameRate) / projectProperties.frameRate;
+  const existing = (clip.keyframes || []).find(k => Math.abs(k.time - frame) < .5 / projectProperties.frameRate);
+  if (existing) existing.values = { ...existing.values, ...values };
+  else (clip.keyframes ||= []).push({ time: frame, values, easing: 'Linear' });
+  clip.keyframes.sort((a, b) => a.time - b.time);
+  renderTracks(); transportStatus.textContent = 'Keyframe set at ' + formatRulerTime(frame);
+}
+function addVideoFxFieldKeyframe(field) {
+  const found = selectedVideoClip();
+  if (!found) { transportStatus.textContent = 'Select a video event first'; return; }
+  if (field === 'effects' || field === 'codexEffects' || field === 'sapphireEffects') return;
+  const clip = found.clip;
+  const local = Math.max(0, Math.min(Number(clip.duration) || 0, timelineClockTime - (Number(clip.startTime) || 0)));
+  const frame = Math.round(local * projectProperties.frameRate) / projectProperties.frameRate;
+  const value = interpolateVideoFx(clip, local)[field];
+  recordUndo();
+  let key = (clip.keyframes ||= []).find(item => Math.abs(Number(item.time) - frame) < .5 / projectProperties.frameRate);
+  if (!key) { key = { time: frame, values: {}, easing: 'Linear' }; clip.keyframes.push(key); }
+  key.values ||= {}; key.values[field] = value;
+  clip.keyframes.sort((a, b) => a.time - b.time);
+  renderTracks(); renderVideoFxBrowser();
+  transportStatus.textContent = field + ' keyframe set at ' + formatRulerTime(frame);
 }
 function ensureVideoFx(clip) {
   clip.videoFx = { ...defaultVideoFx(), ...(clip.videoFx || {}) };
-  clip.videoFx.effects = Array.isArray(clip.videoFx.effects) ? [...new Set(clip.videoFx.effects)] : [];
-  clip.videoFx.codexEffects = Array.isArray(clip.videoFx.codexEffects) ? [...new Set(clip.videoFx.codexEffects)] : [];
+  const keys = Array.isArray(clip.keyframes) ? clip.keyframes : [];
+  clip.videoFx.effects = [...new Set([...(Array.isArray(clip.videoFx.effects) ? clip.videoFx.effects : []), ...keys.flatMap(key => Array.isArray(key.values?.effects) ? key.values.effects : [])])];
+  clip.videoFx.codexEffects = [...new Set([...(Array.isArray(clip.videoFx.codexEffects) ? clip.videoFx.codexEffects : []), ...keys.flatMap(key => Array.isArray(key.values?.codexEffects) ? key.values.codexEffects : [])])];
+  clip.videoFx.sapphireEffects = [...new Set([...(Array.isArray(clip.videoFx.sapphireEffects) ? clip.videoFx.sapphireEffects : []), ...keys.flatMap(key => Array.isArray(key.values?.sapphireEffects) ? key.values.sapphireEffects : [])])];
+  for (const key of keys) if (key.values) { delete key.values.effects; delete key.values.codexEffects; delete key.values.sapphireEffects; }
   return clip.videoFx;
 }
 function normalizeFx(value) {
@@ -291,7 +339,7 @@ function launchEditor(details) {
   resetProjectContents();
   gridSpacing = 'seconds'; projectBpm = 120; projectProperties = defaultProjectProperties(); timeDisplayMode = 'time';
   const usesEarlyVersionIcon = activeRelease <= 3;
-  editorVersionIcon.src = usesEarlyVersionIcon ? 'assets/version-icon-1-to-3.png' : 'assets/fish-video-icon.png';
+  editorVersionIcon.src = usesEarlyVersionIcon ? 'assets/version-icon-1-to-3.png' : 'fish-video-icon.png';
   editorVersionIcon.alt = usesEarlyVersionIcon ? 'Fish Video version 1.0 to 3.0' : 'Fish Video';
   projectLibraryTab.textContent = projectLibraryName();
   projectLibraryHeading.textContent = projectLibraryName();
@@ -402,6 +450,57 @@ function renderMediaItem(entry) {
   thumb.setAttribute('aria-label', `Preview ${entry.file.name}`);
   thumb.innerHTML = `<span>${entry.type === 'video' ? '▶' : entry.type === 'audio' ? '♫' : '▧'}</span>`;
   thumb.addEventListener('click', () => previewMedia(entry));
+  let touchPressTimer = 0, touchDragging = false, touchGhost = null, touchOrigin = null;
+  thumb.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch' || event.button !== 0) return;
+    event.preventDefault();
+    touchDragging = false; touchOrigin = { x: event.clientX, y: event.clientY };
+    thumb.setPointerCapture(event.pointerId);
+    touchPressTimer = setTimeout(() => {
+      touchDragging = true;
+      touchGhost = document.createElement('div'); touchGhost.className = 'media-touch-ghost';
+      touchGhost.textContent = entry.file.name; document.body.append(touchGhost);
+      touchGhost.style.left = event.clientX + 'px'; touchGhost.style.top = event.clientY + 'px';
+      card.classList.add('touch-dragging');
+    }, 280);
+  });
+  thumb.addEventListener('pointermove', (event) => {
+    if (event.pointerType !== 'touch' || !touchOrigin) return;
+    if (!touchDragging && Math.hypot(event.clientX - touchOrigin.x, event.clientY - touchOrigin.y) > 12) {
+      clearTimeout(touchPressTimer); touchPressTimer = 0;
+    }
+    if (!touchDragging || !touchGhost) return;
+    event.preventDefault(); touchGhost.style.left = event.clientX + 'px'; touchGhost.style.top = event.clientY + 'px';
+    const bounds = timelineBody.getBoundingClientRect();
+    if (event.clientY > bounds.bottom - 36) timelineBody.scrollTop += 14;
+    else if (event.clientY < bounds.top + 36) timelineBody.scrollTop -= 14;
+    if (event.clientX > bounds.right - 36) timelineBody.scrollLeft += 14;
+    else if (event.clientX < bounds.left + 36) timelineBody.scrollLeft -= 14;
+  });
+  const finishTouchDrag = (event) => {
+    if (event.pointerType !== 'touch' || !touchOrigin) return;
+    clearTimeout(touchPressTimer); touchPressTimer = 0;
+    if (touchDragging) {
+      const lane = document.elementFromPoint(event.clientX, event.clientY)?.closest('.track-lane');
+      const track = lane && tracks.find(item => item.id === lane.dataset.trackId);
+      const compatible = track && (track.type === 'audio' ? entry.type === 'audio' : entry.type === 'video' || entry.type === 'image');
+      if (compatible) {
+        addToTimeline(entry, track.id);
+        const added = track.clips.at(-1);
+        if (added) {
+          added.startTime = timelineTimeAtClientX(event.clientX);
+          if (track.type === 'video') { const linked = tracks.find(item => item.type === 'audio')?.clips.at(-1); if (linked?.linkedAudio && linked.mediaId === entry.id) linked.startTime = added.startTime; }
+          renderTracks(); updateProjectLength();
+        }
+      }
+      touchGhost?.remove(); touchGhost = null; card.classList.remove('touch-dragging');
+    } else {
+      previewMedia(entry);
+    }
+    touchOrigin = null; touchDragging = false;
+  };
+  thumb.addEventListener('pointerup', finishTouchDrag);
+  thumb.addEventListener('pointercancel', finishTouchDrag);
   const name = document.createElement('span'); name.className = 'media-name'; name.textContent = entry.file.name;
   const detail = document.createElement('span'); detail.className = 'media-kind'; detail.textContent = mediaDetails(entry);
   const add = document.createElement('button'); add.type = 'button'; add.className = 'media-add'; add.textContent = '+ Timeline';
@@ -813,8 +912,16 @@ function renderTracks() {
       if (entry) {
         const trackId = lane.dataset.trackId;
         addToTimeline(entry, trackId);
-        const added = tracks.find((item) => item.id === trackId)?.clips.at(-1);
-        if (added) added.startTime = timelineTimeAtClientX(event.clientX);
+        const addedTrack = tracks.find((item) => item.id === trackId);
+        const added = addedTrack?.clips.at(-1);
+        if (added) {
+          added.startTime = timelineTimeAtClientX(event.clientX);
+          if (addedTrack.type === 'video') {
+            const audioTrack = tracks.find((item) => item.type === 'audio');
+            const linked = audioTrack?.clips.at(-1);
+            if (linked?.linkedAudio && linked.mediaId === entry.id) linked.startTime = added.startTime;
+          }
+        }
         renderTracks(); updateProjectLength();
       }
     });
@@ -857,7 +964,10 @@ function startClipDrag(event, sourceTrack, clipData, element) {
   const originalStart = Number(clipData.startTime) || 0;
   const selectedMembers = selectedClipIds.size > 1 && selectedClipIds.has(clipData.id)
     ? selectedClipEntries().map(({ track, clip }) => ({ track, clip, start: Number(clip.startTime) || 0 })) : null;
-  const groupMembers = selectedMembers || (clipData.groupId ? tracks.flatMap((track) => track.clips.filter((clip) => clip.groupId === clipData.groupId).map((clip) => ({ track, clip, start: Number(clip.startTime) || 0 }))) : [{ track: sourceTrack, clip: clipData, start: originalStart }]);
+  const linkedAudio = sourceTrack.type === 'video' && !selectedMembers && !clipData.groupId
+    ? tracks.flatMap((track) => track.type === 'audio' ? track.clips.filter((clip) => clip.linkedAudio && clip.mediaId === clipData.mediaId && Math.abs((Number(clip.startTime) || 0) - originalStart) < .002).map((clip) => ({ track, clip, start: Number(clip.startTime) || 0 })) : [])
+    : [];
+  const groupMembers = selectedMembers || (clipData.groupId ? tracks.flatMap((track) => track.clips.filter((clip) => clip.groupId === clipData.groupId).map((clip) => ({ track, clip, start: Number(clip.startTime) || 0 }))) : [{ track: sourceTrack, clip: clipData, start: originalStart }, ...linkedAudio]);
   let dragging = false;
   const onMove = (moveEvent) => {
     const dx = moveEvent.clientX - originX;
@@ -875,7 +985,7 @@ function startClipDrag(event, sourceTrack, clipData, element) {
     const nextStart = Number(element.dataset.dragStartTime) || 0;
     const targetLane = document.elementFromPoint(upEvent.clientX, upEvent.clientY)?.closest('.track-lane');
     const targetTrack = targetLane && tracks.find((track) => track.id === targetLane.dataset.trackId);
-    if (groupMembers.length === 1 && targetTrack && targetTrack.type === sourceTrack.type && targetTrack !== sourceTrack) {
+    if (!selectedMembers && !clipData.groupId && targetTrack && targetTrack.type === sourceTrack.type && targetTrack !== sourceTrack) {
       sourceTrack.clips = sourceTrack.clips.filter((clip) => clip.id !== clipData.id);
       targetTrack.clips.push(clipData);
       selectedTrackId = targetTrack.id;
@@ -1286,8 +1396,7 @@ function syncTimelineAudioAt(time) {
     if (state.clipId !== active.clip.id) {
       state.player.pause();
       state.clipId = active.clip.id;
-      state.player.src = entry.url;
-      state.player.load();
+      if (state.player.currentSrc !== entry.url && state.player.src !== entry.url) { state.player.src = entry.url; state.player.load(); }
       const startAtOffset = () => {
         if (!timelineAudioPlayback || !timelineClockPlaying || state.clipId !== active.clip.id) return;
         const eventStart = Number.isFinite(Number(active.clip.startTime)) ? Number(active.clip.startTime) : track.clips.slice(0, track.clips.indexOf(active.clip)).reduce((total, clip) => total + (Number(clip.duration) || 0), 0);
@@ -1352,6 +1461,7 @@ function syncTimelineVideoAt(time) {
   previewVideo.muted = true;
   const changedClip = timelineVideoClipId !== active.clip.id || previewVideo.src !== entry.url;
   if (changedClip) {
+    videoFxHasLastGoodFrame = false;
     timelineVideoClipId = active.clip.id;
     previewVideo.src = entry.url;
     previewVideo.load();
@@ -2326,37 +2436,110 @@ function openRenderDialog() {
     const supportsManualFrames=typeof CanvasCaptureMediaStreamTrack!=='undefined'&&typeof CanvasCaptureMediaStreamTrack.prototype.requestFrame==='function';
     let canvasStream;try{canvasStream=canvas.captureStream(supportsManualFrames?0:fps);}catch(error){console.error(error);transportStatus.textContent='Could not start video rendering on this device';return;}
     const hasTimelineAudio=tracks.some(track=>track.type==='audio'&&track.clips.some(clip=>{const entry=findMedia(clip.mediaId);return entry?.type==='audio'||(clip.linkedAudio&&entry?.type==='video');}));
+    const activeVideoAt=time=>{let active=null;for(const track of tracks)if(track.type==='video')for(const clip of track.clips){const start=Number(clip.startTime)||0;if(time>=start&&time<start+(Number(clip.duration)||0)&&(!active||start>=active.start))active={clip,start};}return active;};
     let audioDestination=null;
     if(hasTimelineAudio){try{await connectAudioGraph();audioDestination=audioContext.createMediaStreamDestination();audioGraph.analyser.connect(audioDestination);}catch(error){canvasStream.getTracks().forEach(track=>track.stop());console.error(error);transportStatus.textContent='Could not prepare audio for rendering';return;}}
     const stream=new MediaStream([...canvasStream.getVideoTracks(),...(audioDestination?.stream.getAudioTracks()||[])]);const videoTrack=canvasStream.getVideoTracks()[0];
     const mime=select.value; let recorder;try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:Math.max(100000,Number(projectProperties.videoBitrate||8)*1000000)*(preset==='best'?1.5:1),...(hasTimelineAudio?{audioBitsPerSecond:192000}:{})});}catch(error){stream.getTracks().forEach(track=>track.stop());if(audioDestination)audioGraph.analyser.disconnect(audioDestination);console.error(error);transportStatus.textContent='This device cannot encode the selected video format with audio';return;} const chunks=[];
     recorder.ondataavailable=(event)=>{if(event.data?.size)chunks.push(event.data);};
     recorder.onstop=()=>{stopPlayback(false);const blob=new Blob(chunks,{type:mime});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=(projectName||'fish-video')+'.'+(mime==='video/mp4'?'mp4':'webm');link.click();setTimeout(()=>URL.revokeObjectURL(link.href),30000);stream.getTracks().forEach(t=>t.stop());if(audioDestination)try{audioGraph.analyser.disconnect(audioDestination);}catch{}transportStatus.textContent='Render complete';};
-    timelineClockTime=0; stopPlayback(false);if(hasTimelineAudio){timelineAudioPlayback=true;timelineClockPlaying=true;}try{recorder.start(250);}catch(error){stream.getTracks().forEach(track=>track.stop());if(audioDestination)try{audioGraph.analyser.disconnect(audioDestination);}catch{}stopPlayback(false);console.error(error);transportStatus.textContent='Could not start the render on this device';return;}transportStatus.textContent=hasTimelineAudio?'Rendering video + audio…':'Rendering video…';
     const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-    const activeVideoAt=time=>{let active=null;for(const track of tracks)if(track.type==='video')for(const clip of track.clips){const start=Number(clip.startTime)||0;if(time>=start&&time<start+(Number(clip.duration)||0)&&(!active||start>=active.start))active={clip,start};}return active;};
-    let previousAudioTime=0,previousAudioWall=performance.now();
+    timelineClockTime = 0; stopPlayback(false);
+    const firstVideo = activeVideoAt(0);
+    if (firstVideo) {
+      syncTimelineVideoAt(0);
+      const firstEntry = findMedia(firstVideo.clip.mediaId);
+      if (firstEntry?.type === 'video') {
+        if (previewVideo.readyState < 2) await Promise.race([new Promise(resolve => previewVideo.addEventListener('loadeddata', resolve, { once: true })), wait(2200)]);
+        if (previewVideo.readyState >= 1 && previewVideo.currentTime !== 0) {
+          try { previewVideo.currentTime = 0; } catch {}
+          if (previewVideo.seeking) await Promise.race([new Promise(resolve => previewVideo.addEventListener('seeked', resolve, { once: true })), wait(250)]);
+        }
+      } else if (firstEntry?.type === 'image' && previewImage.decode) await previewImage.decode().catch(() => {});
+    }
+    if (hasTimelineAudio) {
+      for (const track of tracks.filter(item => item.type === 'audio')) {
+        const clip = track.clips.find(item => (Number(item.startTime) || 0) <= 0 && (Number(item.startTime) || 0) + (Number(item.duration) || 0) > 0);
+        const entry = clip && findMedia(clip.mediaId);
+        if (!entry || (entry.type !== 'audio' && !(clip.linkedAudio && entry.type === 'video'))) continue;
+        const state = getTimelineTrackPlayer(track.id); state.trackId = track.id; state.player.preload = 'auto';
+        if (state.player.currentSrc !== entry.url && state.player.src !== entry.url) { state.player.src = entry.url; state.player.load(); }
+        if (state.player.readyState < 1) await Promise.race([new Promise(resolve => state.player.addEventListener('loadedmetadata', resolve, { once: true })), wait(1800)]);
+      }
+      timelineAudioPlayback = true; timelineClockPlaying = true;
+    }
+    try{recorder.start(250);}catch(error){stream.getTracks().forEach(track=>track.stop());if(audioDestination)try{audioGraph.analyser.disconnect(audioDestination);}catch{}stopPlayback(false);console.error(error);transportStatus.textContent='Could not start the render on this device';return;}transportStatus.textContent=hasTimelineAudio?'Rendering video + audio…':'Rendering video…';
     const frameBuffer=document.createElement('canvas');frameBuffer.width=canvas.width;frameBuffer.height=canvas.height;
     const frameBufferCtx=frameBuffer.getContext('2d',{alpha:false});
+    const lastGoodFrame=document.createElement('canvas');lastGoodFrame.width=canvas.width;lastGoodFrame.height=canvas.height;
+    const lastGoodFrameCtx=lastGoodFrame.getContext('2d',{alpha:false});let hasGoodFrame=false;
     const renderFrames=async()=>{
-      const total=Math.max(1,Math.ceil(duration*fps)),renderStartedAt=performance.now();
-      for(let frame=0;frame<total&&recorder.state==='recording';frame++){
-        const time=Math.min(duration,frame/fps);timelineClockTime=time;
-        if(hasTimelineAudio){syncTimelineAudioAt(time);const wallNow=performance.now(),wallDelta=Math.max(.001,(wallNow-previousAudioWall)/1000),timelineDelta=frame?Math.max(0,time-previousAudioTime):0,ratio=frame?Math.max(.0625,Math.min(4,timelineDelta/wallDelta)):1;for(const state of timelineAudioPlayers.values()){const track=tracks.find(item=>item.id===state.trackId),clip=track?.clips.find(item=>item.id===state.clipId);if(track&&clip&&!state.player.paused){const baseRate=clipPlaybackRate(combineTrackEventFx(track,clip));state.player.playbackRate=Math.max(.0625,Math.min(4,baseRate*ratio));}}previousAudioTime=time;previousAudioWall=wallNow;}
-        syncTimelineVideoAt(time);const active=activeVideoAt(time),entry=active&&findMedia(active.clip.mediaId);
-        if(entry?.type==='video'){
-          if(previewVideo.readyState<1)await Promise.race([new Promise(resolve=>previewVideo.addEventListener('loadedmetadata',resolve,{once:true})),wait(40)]);
-          if(previewVideo.readyState>=1&&Number.isFinite(previewVideo.duration)){const wanted=Math.max(0,Math.min(time-active.start,Math.max(0,previewVideo.duration-.001)));if(Math.abs(previewVideo.currentTime-wanted)>.0005)await new Promise(resolve=>{let timer;const done=()=>{clearTimeout(timer);previewVideo.removeEventListener('seeked',done);resolve();};previewVideo.addEventListener('seeked',done,{once:true});try{previewVideo.currentTime=wanted;}catch{done();return;}timer=setTimeout(done,Math.min(12,1000/fps*.7));});}
-        }
-        const source=!videoFxCanvas.hidden?videoFxCanvas:!previewVideo.hidden?previewVideo:!previewImage.hidden?previewImage:null;
-        try{frameBufferCtx.save();frameBufferCtx.setTransform(1,0,0,1,0,0);frameBufferCtx.globalAlpha=1;frameBufferCtx.filter='none';frameBufferCtx.fillStyle='#000';frameBufferCtx.fillRect(0,0,frameBuffer.width,frameBuffer.height);
-          if(source){const sw=source.videoWidth||source.naturalWidth||source.width,sh=source.videoHeight||source.naturalHeight||source.height;if(sw>0&&sh>0){const fit=Math.min(frameBuffer.width/sw,frameBuffer.height/sh),w=sw*fit,h=sh*fit,visual=transitionVisual(active?.clip,time-(active?.start||0)),fx=active?interpolateVideoFx(active.clip,time-active.start):null;frameBufferCtx.translate(frameBuffer.width/2+visual.offsetX*frameBuffer.width,frameBuffer.height/2);frameBufferCtx.scale(visual.scaleX,visual.scaleY);frameBufferCtx.globalAlpha=visual.alpha;if(visual.wipe<1){frameBufferCtx.beginPath();frameBufferCtx.rect(-frameBuffer.width/2,-frameBuffer.height/2,frameBuffer.width*visual.wipe,frameBuffer.height);frameBufferCtx.clip();}frameBufferCtx.filter='brightness('+(fx?.brightness??100)/100+') contrast('+(fx?.contrast??100)/100+') saturate('+(fx?.saturation??100)/100+')';frameBufferCtx.drawImage(source,-w/2,-h/2,w,h);}}
-          frameBufferCtx.restore();ctx.drawImage(frameBuffer,0,0);
-        }catch(error){try{frameBufferCtx.restore();}catch{}console.debug('Frame decode/render skipped; duplicating prior frame',error);}
-        // A failed draw leaves the prior output pixels intact: exactly one duplicate tick.
-        videoTrack?.requestFrame?.();const nextDeadline=renderStartedAt+(frame+1)*1000/fps,remaining=nextDeadline-performance.now();if(remaining>0)await wait(remaining);
-      }
-      if(recorder.state==='recording')recorder.stop();stopPlayback(false);
+      await runRenderClock({
+        duration, fps,
+        shouldContinue: () => recorder.state === 'recording',
+        renderFrame: async ({ time }) => {
+          timelineClockTime = time;
+          // Audio follows the same wall-clock timeline; never speed it up to catch a dropped video frame.
+          if (hasTimelineAudio) syncTimelineAudioAt(time);
+          syncTimelineVideoAt(time);
+          if (!sapphireWatermarkOverlay.hidden && !sapphireWatermarkOverlay.complete && sapphireWatermarkOverlay.decode) {
+            await Promise.race([sapphireWatermarkOverlay.decode().catch(() => {}), wait(1200)]);
+          }
+          const active = activeVideoAt(time), entry = active && findMedia(active.clip.mediaId);
+          if (entry?.type === 'video') {
+            if (previewVideo.readyState < 1) await Promise.race([new Promise(resolve => previewVideo.addEventListener('loadedmetadata', resolve, { once: true })), wait(40)]);
+            if (previewVideo.readyState >= 1 && Number.isFinite(previewVideo.duration)) {
+              const wanted = Math.max(0, Math.min(time - active.start, Math.max(0, previewVideo.duration - .001)));
+              if (Math.abs(previewVideo.currentTime - wanted) > .0005) await new Promise(resolve => {
+                let timer;
+                const done = () => { clearTimeout(timer); previewVideo.removeEventListener('seeked', done); resolve(); };
+                previewVideo.addEventListener('seeked', done, { once: true });
+                try { previewVideo.currentTime = wanted; } catch { done(); return; }
+                timer = setTimeout(done, Math.min(12, 1000 / fps * .7));
+              });
+            }
+          }
+          const exportFx = active ? interpolateVideoFx(active.clip, time - active.start) : null;
+          const exportFxSource = !previewVideo.hidden ? previewVideo : !previewImage.hidden ? previewImage : null;
+          if (exportFxSource && exportFx && canvasVideoFxNeeded(exportFx, new Set(exportFx.effects || []))) {
+            processVideoFxFrameSafe(exportFxSource, exportFx);
+          }
+          const source = !videoFxCanvas.hidden ? videoFxCanvas : exportFxSource;
+          let validFrame = false;
+          try {
+            frameBufferCtx.save(); frameBufferCtx.setTransform(1, 0, 0, 1, 0, 0); frameBufferCtx.globalAlpha = 1; frameBufferCtx.filter = 'none'; frameBufferCtx.fillStyle = '#000'; frameBufferCtx.fillRect(0, 0, frameBuffer.width, frameBuffer.height);
+            if (source) {
+              const sw = source.videoWidth || source.naturalWidth || source.width, sh = source.videoHeight || source.naturalHeight || source.height;
+              if (sw > 0 && sh > 0) {
+                const fit = Math.min(frameBuffer.width / sw, frameBuffer.height / sh), w = sw * fit, h = sh * fit;
+                const visual = transitionVisual(active?.clip, time - (active?.start || 0)), fx = exportFx;
+                const shake = exportFx?.sapphireEffects?.includes('S_Shake') ? Number(exportFx.s_ShakeAmplitude || 0) / 5 : 0;
+                const shakePhase = performance.now() / 1000 * Number(exportFx?.s_ShakeFrequency || 8) * Math.PI * 2;
+                frameBufferCtx.translate(frameBuffer.width / 2 + visual.offsetX * frameBuffer.width + Math.sin(shakePhase) * shake, frameBuffer.height / 2 + Math.cos(shakePhase * .83) * shake);
+                frameBufferCtx.scale(visual.scaleX, visual.scaleY); frameBufferCtx.globalAlpha = visual.alpha;
+                if (visual.wipe < 1) { frameBufferCtx.beginPath(); frameBufferCtx.rect(-frameBuffer.width / 2, -frameBuffer.height / 2, frameBuffer.width * visual.wipe, frameBuffer.height); frameBufferCtx.clip(); }
+                frameBufferCtx.filter = 'brightness(' + (fx?.brightness ?? 100) / 100 + ') contrast(' + (fx?.contrast ?? 100) / 100 + ') saturate(' + (fx?.saturation ?? 100) / 100 + ') ' + sapphireCssFilters(fx || {}).join(' ');
+                frameBufferCtx.drawImage(source, -w / 2, -h / 2, w, h); validFrame = true;
+              }
+            }
+            frameBufferCtx.restore();
+            if (validFrame) {
+              if (!sapphireWatermarkOverlay.hidden && sapphireWatermarkOverlay.complete && sapphireWatermarkOverlay.naturalWidth) {
+                frameBufferCtx.save(); frameBufferCtx.setTransform(1, 0, 0, 1, 0, 0); frameBufferCtx.globalAlpha = 1; frameBufferCtx.filter = 'none';
+                frameBufferCtx.drawImage(sapphireWatermarkOverlay, 0, 0, frameBuffer.width, frameBuffer.height); frameBufferCtx.restore();
+              }
+              ctx.drawImage(frameBuffer, 0, 0); lastGoodFrameCtx.drawImage(frameBuffer, 0, 0); hasGoodFrame = true;
+            } else if (hasGoodFrame) ctx.drawImage(lastGoodFrame, 0, 0);
+          } catch (error) {
+            try { frameBufferCtx.restore(); } catch {}
+            if (hasGoodFrame) ctx.drawImage(lastGoodFrame, 0, 0);
+            console.debug('Frame decode/render skipped; holding last valid frame', error);
+          }
+        },
+        captureFrame: () => { if (hasGoodFrame) videoTrack?.requestFrame?.(); },
+      });
+      if (recorder.state === 'recording') recorder.stop();
+      stopPlayback(false);
     };
     renderFrames().catch(error=>{console.error(error);transportStatus.textContent='Render failed';if(recorder.state==='recording')recorder.stop();});
   };
@@ -2462,11 +2645,15 @@ function setSelectedVideoFxField(field, value) {
   for (const { clip } of selectedVideoClips()) {
     const fx = ensureVideoFx(clip);
     const next = Array.isArray(value) ? [...value] : value;
-    if (!clip.keyframes?.length) { fx[field] = next; continue; }
+    if (field === 'effects' || field === 'codexEffects' || field === 'sapphireEffects' || !clip.keyframes?.length) { fx[field] = next; continue; }
     const local = Math.max(0, Math.min(Number(clip.duration) || 0, timelineClockTime - (Number(clip.startTime) || 0)));
     const frameTime = Math.round(local * projectProperties.frameRate) / projectProperties.frameRate;
     let key = clip.keyframes.find((item) => Math.abs(Number(item.time) - frameTime) < .5 / projectProperties.frameRate);
-    if (!key) { key = { time: frameTime, values: { ...interpolateVideoFx(clip, local) }, easing: 'Linear' }; clip.keyframes.push(key); }
+    if (!key) {
+      const values = { ...interpolateVideoFx(clip, local) };
+      delete values.effects; delete values.codexEffects;
+      key = { time: frameTime, values, easing: 'Linear' }; clip.keyframes.push(key);
+    }
     key.values ||= {};
     key.values[field] = Array.isArray(next) ? [...next] : next;
     clip.keyframes.sort((a, b) => a.time - b.time);
@@ -2580,13 +2767,31 @@ function renderCodexDistortionControls(target) {
   if (!spec) { const hint=document.createElement('p'); hint.className='fx-chain-empty'; hint.textContent='Add an effect, then select it to adjust its controls.'; codexDistortionControls.append(hint); return; }
   const section=document.createElement('fieldset'); section.className='codex-effect-card codex-managed-effect';
   const legend=document.createElement('legend'); legend.textContent=spec.name; section.append(legend);
-  for (const [key,label,a,b,type] of spec.controls) {
-    const row=document.createElement('label'); row.className='codex-control'; const caption=document.createElement('span'); caption.textContent=label; row.append(caption);
-    let input;
-    if(type==='select'){ input=document.createElement('select'); for(const option of a) input.add(new Option(option[0].toUpperCase()+option.slice(1),option)); input.value=target[key] ?? a[0]; }
-    else { input=document.createElement('input'); input.type='range'; input.min=String(a); input.max=String(b); input.step=key==='kaleidoscopeSegments'?'1':'1'; input.value=String(target[key] ?? (key==='kaleidoscopeSegments'?6:0)); }
-    const output=document.createElement('output'); const update=()=>{target[key]=type==='select'?input.value:Number(input.value); output.textContent=String(input.value); applyVideoFx(target);};
-    output.textContent=String(input.value); input.addEventListener('pointerdown',()=>recordUndo(),{passive:true}); input.addEventListener('input',update); input.addEventListener('change',update); row.append(input,output); section.append(row);
+  for (const [key, label, optionsOrMin, maxOrType, explicitType] of spec.controls) {
+    const controlType = explicitType || (maxOrType === 'select' ? 'select' : 'range');
+    const row = document.createElement('div'); row.className = 'codex-control codex-keyframe-control';
+    const caption = document.createElement('span'); caption.textContent = label; row.append(caption);
+    const output = document.createElement('output');
+    if (controlType === 'select') {
+      const input = document.createElement('select');
+      for (const option of optionsOrMin) input.add(new Option(option[0].toUpperCase() + option.slice(1), option));
+      input.value = String(target[key] ?? optionsOrMin[0]);
+      output.textContent = input.value;
+      input.addEventListener('change', () => { recordUndo(); setSelectedVideoFxField(key, input.value); applyVideoFx(videoFxAtPlayhead(selectedVideoClip()?.clip)); output.textContent = input.value; });
+      row.append(input, output);
+    } else {
+      const pair = document.createElement('div'); pair.className = 'video-fx-control-inputs';
+      const slider = document.createElement('input'); slider.type = 'range'; slider.min = String(optionsOrMin); slider.max = String(maxOrType); slider.step = key === 'kaleidoscopeSegments' ? '1' : '1'; slider.value = String(target[key] ?? (key === 'kaleidoscopeSegments' ? 6 : 0));
+      const number = document.createElement('input'); number.type = 'number'; number.className = 'video-fx-number'; number.min = slider.min; number.max = slider.max; number.step = slider.step; number.value = slider.value; number.setAttribute('aria-label', label + ' value');
+      const keyButton = document.createElement('button'); keyButton.type = 'button'; keyButton.className = 'video-fx-keyframe-button'; keyButton.textContent = '◆'; keyButton.title = 'Set ' + label + ' keyframe'; keyButton.setAttribute('aria-label', keyButton.title);
+      const update = raw => { const val = Math.max(Number(slider.min), Math.min(Number(slider.max), Number(raw))); if (!Number.isFinite(val)) return; slider.value = number.value = String(val); output.textContent = String(val); setSelectedVideoFxField(key, val); applyVideoFx(videoFxAtPlayhead(selectedVideoClip()?.clip)); };
+      output.textContent = slider.value;
+      slider.addEventListener('pointerdown', () => recordUndo(), { passive: true }); number.addEventListener('focus', () => recordUndo());
+      slider.addEventListener('input', () => update(slider.value)); number.addEventListener('change', () => update(number.value));
+      keyButton.addEventListener('click', () => addVideoFxFieldKeyframe(key));
+      pair.append(slider, number, keyButton); row.append(pair, output);
+    }
+    section.append(row);
   }
   codexDistortionControls.append(section);
 }
@@ -2595,26 +2800,96 @@ function moveCodexEffect(target,index,direction) { const next=index+direction; i
 function installedDirectxPlugins() {
   try {
     const entries = JSON.parse(localStorage.getItem('fish-video-wax-installs') || '[]');
+    return Array.isArray(entries) ? entries.filter(entry => entry.category === 'DirectX (Legacy)' && isDirectxPluginCompatible(entry)) : [];
+  } catch { return []; }
+}
+function installedSapphirePlugins() {
+  try {
+    const entries = JSON.parse(localStorage.getItem('fish-video-wax-installs') || '[]');
     return Array.isArray(entries)
-      ? entries.filter((entry) => entry.category === 'DirectX (Legacy)' && isDirectxPluginCompatible(entry))
+      ? entries.filter(entry => (entry.isSapphire || /sapphire/i.test(entry.name || '')) && ['DirectX (Legacy)', 'OFX'].includes(entry.category) && isDirectxPluginCompatible(entry))
       : [];
   } catch { return []; }
 }
+function sapphireMajor(plugin) {
+  const match = String(plugin?.name || '').match(/Sapphire\s+(\d+)/i);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  return value >= 2019 ? 99 : value;
+}
 function isDirectxPluginCompatible(plugin) {
   const compatibility = String(plugin.compatibility || '').toLowerCase();
-  const releases = [...compatibility.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number.parseFloat(match[0]));
-  const minRelease = Number.isFinite(plugin.minRelease)
-    ? plugin.minRelease
-    : compatibility.includes('and newer') ? releases[0] || 0
-      : releases.length > 1 ? releases[0] : 0;
-  const maxRelease = Number.isFinite(plugin.maxRelease)
-    ? plugin.maxRelease
+  const releases = [...compatibility.matchAll(/\d+(?:\.\d+)?/g)].map(match => Number.parseFloat(match[0]));
+  const minRelease = Number.isFinite(plugin.minRelease) ? plugin.minRelease
+    : compatibility.includes('and newer') ? releases[0] || 0 : releases.length > 1 ? releases[0] : 0;
+  const maxRelease = Number.isFinite(plugin.maxRelease) ? plugin.maxRelease
     : compatibility.includes('and older') ? releases[0] || Infinity
-      : releases.length > 1 ? releases[1] : releases[0] || Infinity;
+      : compatibility.includes('and newer') ? Infinity
+        : releases.length > 1 ? releases[1] : releases[0] || Infinity;
   return activeRelease >= minRelease && activeRelease <= maxRelease;
 }
+const sapphireCatalog = [
+  { id: 'S_Glow', min: 5, controls: [['s_GlowIntensity', 'Intensity', 0, 100, '%']] },
+  { id: 'S_Blur', min: 5, controls: [['s_BlurAmount', 'Amount', 0, 100, '%']] },
+  { id: 'S_Shake', min: 5, controls: [['s_ShakeAmplitude', 'Amplitude', 0, 100, '%'], ['s_ShakeFrequency', 'Frequency', 1, 30, ' Hz']] },
+  { id: 'S_LensFlare', min: 5, controls: [['s_LensFlareIntensity', 'Intensity', 0, 100, '%']] },
+  { id: 'S_WarpBubble', min: 6, controls: [['s_WarpBubbleAmount', 'Amount', 0, 100, '%']] },
+];
+function hasSapphireEventPlugin(fx, plugin) {
+  return fx.effects.includes('directx:' + plugin.key) || fx.effects.includes('sapphire:' + plugin.key);
+}
+function renderSapphireEventControls(target, displayFx, plugins) {
+  sapphireEffectControls.replaceChildren();
+  const activePlugins = target ? plugins.filter(plugin => hasSapphireEventPlugin(displayFx, plugin)) : [];
+  sapphireEventUi.hidden = activePlugins.length === 0;
+  if (!activePlugins.length) { sapphireVersionLabel.textContent = ''; return; }
+  const major = Math.max(...activePlugins.map(sapphireMajor));
+  sapphireVersionLabel.textContent = major >= 99 ? 'newer build' : major ? major + '.x' : 'installed';
+  const available = sapphireCatalog.filter(effect => major >= effect.min).map(effect => ({ ...effect, controls: [...effect.controls] }));
+  if (major >= 8) {
+    const shake = available.find(effect => effect.id === 'S_Shake');
+    if (shake) shake.controls.push(['s_ShakeRGB', 'RGB shift', 0, 100, '%']);
+  }
+  for (const effect of available) {
+    const section = document.createElement('section'); section.className = 'video-fx-row sapphire-effect-row';
+    const heading = document.createElement('div'); heading.className = 'video-fx-row-heading';
+    const title = document.createElement('strong'); title.textContent = effect.id;
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'fx-remove-button'; remove.textContent = '×'; remove.title = 'Remove ' + effect.id;
+    remove.addEventListener('click', () => { recordUndo(); setSelectedVideoFxField('sapphireEffects', displayFx.sapphireEffects.filter(id => id !== effect.id)); applyVideoFx(videoFxAtPlayhead(selectedVideoClip()?.clip)); renderTracks(); renderVideoFxBrowser(); });
+    heading.append(title, remove); section.append(heading);
+    if (!(displayFx.sapphireEffects || []).includes(effect.id)) {
+      const hint = document.createElement('p'); hint.className = 'fx-chain-empty'; hint.textContent = 'Add this S_ effect from the Sapphire list.'; section.append(hint);
+    } else {
+      for (const [fieldName, label, min, max, unit] of effect.controls) {
+        const field = document.createElement('div'); field.className = 'video-fx-control video-fx-keyframe-control';
+        const caption = document.createElement('span'); caption.textContent = label;
+        const output = document.createElement('output');
+        const pair = document.createElement('div'); pair.className = 'video-fx-control-inputs';
+        const range = document.createElement('input'); range.type = 'range'; range.min = String(min); range.max = String(max); range.step = '1'; range.value = String(displayFx[fieldName] ?? 0);
+        const number = document.createElement('input'); number.type = 'number'; number.className = 'video-fx-number'; number.min = range.min; number.max = range.max; number.step = range.step; number.value = range.value; number.setAttribute('aria-label', label + ' value');
+        const keyButton = document.createElement('button'); keyButton.type = 'button'; keyButton.className = 'video-fx-keyframe-button'; keyButton.textContent = '◆'; keyButton.title = 'Set ' + label + ' keyframe'; keyButton.setAttribute('aria-label', keyButton.title);
+        const sync = raw => { const value = Math.max(min, Math.min(max, Number(raw))); if (!Number.isFinite(value)) return; range.value = number.value = String(value); output.textContent = value + unit; setSelectedVideoFxField(fieldName, value); applyVideoFx(videoFxAtPlayhead(selectedVideoClip()?.clip)); };
+        output.textContent = Number(range.value) + unit;
+        range.addEventListener('pointerdown', () => recordUndo(), { passive: true }); number.addEventListener('focus', () => recordUndo());
+        range.addEventListener('input', () => sync(range.value)); number.addEventListener('change', () => sync(number.value));
+        keyButton.addEventListener('click', () => addVideoFxFieldKeyframe(fieldName));
+        pair.append(range, number, keyButton); field.append(caption, output, pair); section.append(field);
+      }
+    }
+    sapphireEffectControls.append(section);
+  }
+  if (!available.length) { const note = document.createElement('p'); note.className = 'fx-chain-empty'; note.textContent = 'No Sapphire-style effects are exposed for this installed version.'; sapphireEffectControls.append(note); }
+}
+function sapphireCssFilters(fx) {
+  const effects = new Set(fx.sapphireEffects || []), filters = [];
+  if (effects.has('S_Glow')) filters.push('drop-shadow(0 0 ' + (Number(fx.s_GlowIntensity) / 5) + 'px rgba(255,245,220,.9))');
+  if (effects.has('S_Blur')) filters.push('blur(' + (Number(fx.s_BlurAmount) / 12) + 'px)');
+  if (effects.has('S_LensFlare')) filters.push('drop-shadow(0 0 ' + (Number(fx.s_LensFlareIntensity) / 3) + 'px rgba(255,240,190,.8))');
+  if (effects.has('S_Shake') && Number(fx.s_ShakeRGB) > 0) filters.push('hue-rotate(' + (Number(fx.s_ShakeRGB) * 1.8) + 'deg)');
+  return filters;
+}
 function canvasVideoFxNeeded(fx, active) {
-  return (fx.codexEffects || []).some((name)=>['Bend','Corner Pin','Hexagon Tiles','Square Tiles','Kaleidoscope','Warp Waves'].includes(name)) || active.has('cookieCutter') || active.has('mirror') ||
+  return (fx.codexEffects || []).some((name)=>['Bend','Corner Pin','Hexagon Tiles','Square Tiles','Kaleidoscope','Warp Waves'].includes(name)) || (fx.sapphireEffects||[]).includes('S_WarpBubble') || active.has('cookieCutter') || active.has('mirror') ||
     (active.has('pixelate') && Number(fx.pixelSize) > 0) || (active.has('swirl') && Number(fx.swirlAmount) !== 0) ||
     (active.has('wave') && (Number(fx.waveAmountH) || Number(fx.waveAmountV))) ||
     (active.has('deform') && (Number(fx.deformSqueeze) || Number(fx.deformShear) || Number(fx.deformCurve))) ||
@@ -2684,7 +2959,7 @@ function processVideoFxFrame(sourceElement, fx) {
   const sourceWidth = sourceElement instanceof HTMLVideoElement ? sourceElement.videoWidth : sourceElement.naturalWidth;
   const sourceHeight = sourceElement instanceof HTMLVideoElement ? sourceElement.videoHeight : sourceElement.naturalHeight;
   if (!sourceWidth || !sourceHeight) return false;
-  const quality=previewStage.dataset.quality||'auto'; const limit=({draft:360,preview:540,good:720,best:1080,auto:720})[quality]||720;
+  const quality=previewStage.dataset.quality||'auto'; const limit=({draft:320,preview:480,good:540,best:720,auto:480})[quality]||480;
   const scale = Math.min(1, limit / sourceWidth, limit / sourceHeight);
   const width = Math.max(1, Math.round(sourceWidth * scale)), height = Math.max(1, Math.round(sourceHeight * scale));
   if (videoFxCanvas.width !== width || videoFxCanvas.height !== height) {
@@ -2833,6 +3108,10 @@ function processVideoFxFrame(sourceElement, fx) {
     const amp=Number(fx.warpWaveAmount)/100*Math.min(width,height)*.12,phase=performance.now()/1000*(Number(fx.warpWaveSpeed)||0)*Math.PI,theta=(Number(fx.warpWaveAngle)||0)*Math.PI/180,axis=fx.warpWaveAxis||'horizontal';
     pixels=warpPixels(pixels,width,height,(x,y)=>{const wave=Math.sin((x*Math.sin(theta)+y*Math.cos(theta))/Math.min(width,height)*Math.PI*4+phase)*amp; return {x:x+(axis==='vertical'?0:wave),y:y+(axis==='horizontal'?0:wave)};});
   }
+  if ((fx.sapphireEffects||[]).includes('S_WarpBubble') && Number(fx.s_WarpBubbleAmount)) {
+    const cx=width/2,cy=height/2,radius=Math.min(width,height)*.48,power=Number(fx.s_WarpBubbleAmount)/100*.32;
+    pixels=warpPixels(pixels,width,height,(x,y)=>{const dx=x-cx,dy=y-cy,r=Math.hypot(dx,dy)/radius;if(r>=1)return{x,y};const scale=1-power*(1-r*r);return{x:cx+dx*scale,y:cy+dy*scale};});
+  }
   context.putImageData(new ImageData(pixels, width, height), 0, 0);
   if (fx.effects?.includes('cookieCutter') && Number(fx.cookieBorderSize) > 0) {
     const countX = Math.max(1, Math.round(Number(fx.cookieAmountX) || 1));
@@ -2853,9 +3132,29 @@ function processVideoFxFrame(sourceElement, fx) {
   }
   return true;
 }
+function processVideoFxFrameSafe(sourceElement, fx) {
+  try {
+    const rendered = processVideoFxFrame(sourceElement, fx);
+    if (!rendered) return false;
+    if (videoFxLastGoodCanvas.width !== videoFxCanvas.width || videoFxLastGoodCanvas.height !== videoFxCanvas.height) {
+      videoFxLastGoodCanvas.width = videoFxCanvas.width; videoFxLastGoodCanvas.height = videoFxCanvas.height;
+    }
+    videoFxLastGoodCanvas.getContext('2d').drawImage(videoFxCanvas, 0, 0);
+    videoFxHasLastGoodFrame = true;
+    return true;
+  } catch (error) {
+    if (videoFxHasLastGoodFrame && videoFxLastGoodCanvas.width && videoFxLastGoodCanvas.height) {
+      const context = videoFxCanvas.getContext('2d');
+      context.clearRect(0, 0, videoFxCanvas.width, videoFxCanvas.height);
+      context.drawImage(videoFxLastGoodCanvas, 0, 0, videoFxCanvas.width, videoFxCanvas.height);
+    }
+    console.debug('Holding the last valid FX frame', error);
+    return false;
+  }
+}
 function stopVideoFxCanvas() {
   if (videoFxCanvasFrame) cancelAnimationFrame(videoFxCanvasFrame);
-  videoFxCanvasFrame = 0; videoFxCanvasSource = null; videoFxCanvasSettings = null; videoFxCanvas.hidden = true;
+  videoFxCanvasFrame = 0; videoFxCanvasSource = null; videoFxCanvasSettings = null; videoFxCanvas.hidden = true; videoFxHasLastGoodFrame = false;
   videoFxCanvas.style.filter = ''; videoFxCanvas.style.transform = ''; videoFxCanvas.style.boxShadow = '';
   previewVideo.style.visibility = ''; previewImage.style.visibility = '';
 }
@@ -2881,13 +3180,14 @@ function applyVideoFx(settings = selectedVideoClip()?.clip.videoFx) {
   if (active.has('hslAdjust')) filterByEffect.set('hslAdjust', [`saturate(${fx.saturation / 100})`, `hue-rotate(${fx.hue}deg)`]);
   if (active.has('softContrast')) filterByEffect.set('softContrast', [`contrast(${1 - fx.softContrast / 300})`]);
   if (active.has('tvSimulator')) filterByEffect.set('tvSimulator', [`contrast(${1 + fx.tvSimulator / 200})`, `saturate(${1 - fx.tvSimulator / 100})`]);
-  const filters = (fx.effects || []).flatMap((effect) => filterByEffect.get(effect) || []);
+  const filters = [...(fx.effects || []).flatMap((effect) => filterByEffect.get(effect) || []), ...sapphireCssFilters(fx)];
   const codexActive = new Set(fx.codexEffects || []);
   const codexTransforms = [];
 
   if (codexActive.has('Flip')) codexTransforms.push('scaleX(' + (['horizontal', 'both'].includes(fx.flipMode) ? -1 : 1) + ') scaleY(' + (['vertical', 'both'].includes(fx.flipMode) ? -1 : 1) + ')');
 
   if (codexActive.has('Squeeze')) { const squeeze = Number(fx.squeezeAmount || 0) / 100; codexTransforms.push('scaleX(' + (1 - squeeze * .65) + ') scaleY(' + (1 + squeeze * .35) + ')'); }
+  if (codexActive.has('S_Shake') || (fx.sapphireEffects || []).includes('S_Shake')) { const strength=Number(fx.s_ShakeAmplitude||0)/5, phase=performance.now()/1000*Number(fx.s_ShakeFrequency||8)*Math.PI*2; codexTransforms.push('translate('+(Math.sin(phase)*strength)+'px, '+(Math.cos(phase*.83)*strength)+'px)'); }
 
   const transforms = {
     deform: '',
@@ -2913,13 +3213,21 @@ function applyVideoFx(settings = selectedVideoClip()?.clip.videoFx) {
   videoFxCanvas.style.filter = filters.join(' ');
   videoFxCanvas.style.transform = element.style.transform;
   videoFxCanvas.style.boxShadow = element.style.boxShadow;
-  const render = () => {
-    if (videoFxCanvasSource !== element || videoFxCanvas.hidden) { videoFxCanvasFrame = 0; return; }
-    processVideoFxFrame(element, fx);
-    if (element instanceof HTMLVideoElement && !element.paused && !element.ended) videoFxCanvasFrame = requestAnimationFrame(render);
+  const render = (timestamp = performance.now()) => {
+    // Live preview only: keep the media element's own clock authoritative.
+    if (videoFxCanvasSource !== element || videoFxCanvas.hidden) {
+      videoFxCanvasFrame = 0;
+      return;
+    }
+    const playingVideo = element instanceof HTMLVideoElement && !element.paused && !element.ended;
+    if (!playingVideo || timestamp - videoFxCanvasLastFrameAt >= 1000 / 30) {
+      videoFxCanvasLastFrameAt = timestamp;
+      processVideoFxFrameSafe(element, fx);
+    }
+    if (playingVideo) videoFxCanvasFrame = requestAnimationFrame(render);
     else videoFxCanvasFrame = 0;
   };
-  render();
+  videoFxCanvasFrame = requestAnimationFrame(render);
 }
 previewVideo.addEventListener('loadeddata', () => {
   if (!videoFxCanvas.hidden && videoFxCanvasSource === previewVideo) applyVideoFx(videoFxCanvasSettings);
@@ -2967,9 +3275,32 @@ function renderVideoFxBrowser() {
     button.classList.toggle('applied', Boolean(displayFx?.codexEffects?.length));
     codexFxButtons.append(button);
   }
+  const sapphirePlugins = dxSupported ? installedSapphirePlugins() : [];
+  sapphirePluginBrowser.hidden = !sapphirePlugins.length;
+  sapphirePluginButtons.replaceChildren();
+  const activeSapphirePlugins = target ? sapphirePlugins.filter(plugin => hasSapphireEventPlugin(displayFx, plugin)) : [];
+  for (const plugin of sapphirePlugins) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.sapphirePlugin = plugin.key;
+    button.textContent = plugin.name + ' · ' + (plugin.bits || plugin.category);
+    button.disabled = !target;
+    button.classList.toggle('applied', hasSapphireEventPlugin(displayFx || { effects: [] }, plugin));
+    sapphirePluginButtons.append(button);
+  }
+  sapphireEffectButtons.replaceChildren();
+  const availableSapphireMajor = Math.max(0, ...activeSapphirePlugins.map(sapphireMajor));
+  const catalogMajor = Math.max(availableSapphireMajor, ...sapphirePlugins.map(sapphireMajor));
+  for (const effect of sapphireCatalog.filter(item => catalogMajor >= item.min)) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.sapphireEffect = effect.id;
+    button.textContent = effect.id; button.disabled = !target || !activeSapphirePlugins.length;
+    button.classList.toggle('applied', Boolean(displayFx?.sapphireEffects?.includes(effect.id)));
+    sapphireEffectButtons.append(button);
+  }
+  renderSapphireEventControls(target, displayFx, sapphirePlugins);
   videoFxChain.replaceChildren();
-  codexDistortionUi.hidden = !dxSupported || !codexPlugins.length || !target;
-  if (target && codexPlugins.length) renderCodexDistortionControls(target);
+  // The distortion controls are a built-in editor surface; don't hide them
+  // just because the optional CodeX compatibility package isn't installed.
+  codexDistortionUi.hidden = !dxSupported || !target;
+  if (target) renderCodexDistortionControls(target);
   else codexDistortionControls.replaceChildren();
   if (!target) return;
   if (!displayFx.effects.length) {
@@ -3012,13 +3343,21 @@ function renderVideoFxBrowser() {
     tools.append(moveUp, moveDown, remove);
     heading.append(title, tools); row.append(heading);
     for (const [control, label, min, max, unit] of info?.controls || []) {
-      const field = document.createElement('label'); field.className = 'video-fx-control';
+      const field = document.createElement('div'); field.className = 'video-fx-control video-fx-keyframe-control';
+      const caption = document.createElement('span'); caption.textContent = label;
       const output = document.createElement('output');
-      const input = document.createElement('input'); input.type = 'range'; input.min = String(min); input.max = String(max); input.step = max - min <= 2 ? '0.05' : '1'; input.value = String(displayFx[control]);
-      const update = () => { output.textContent = `${Number(input.value).toFixed(max - min <= 2 ? 2 : 0)}${unit}`; };
-      update(); field.append(document.createTextNode(label), output, input); row.append(field);
+      const pair = document.createElement('div'); pair.className = 'video-fx-control-inputs';
+      const input = document.createElement('input'); input.type = 'range'; input.min = String(min); input.max = String(max); input.step = max - min <= 2 ? '0.05' : '1'; input.value = String(displayFx[control] ?? 0);
+      const number = document.createElement('input'); number.type = 'number'; number.className = 'video-fx-number'; number.min = String(min); number.max = String(max); number.step = input.step; number.value = input.value; number.setAttribute('aria-label', label + ' value');
+      const keyButton = document.createElement('button'); keyButton.type = 'button'; keyButton.className = 'video-fx-keyframe-button'; keyButton.textContent = '◆'; keyButton.title = 'Set ' + label + ' keyframe at playhead'; keyButton.setAttribute('aria-label', keyButton.title);
+      const update = (raw) => { const value = Math.max(min, Math.min(max, Number(raw))); if (!Number.isFinite(value)) return; input.value = String(value); number.value = String(value); output.textContent = Number(value).toFixed(max - min <= 2 ? 2 : 0) + unit; setSelectedVideoFxField(control, value); applyVideoFx(videoFxAtPlayhead(selection.clip)); };
+      output.textContent = Number(input.value).toFixed(max - min <= 2 ? 2 : 0) + unit;
+      pair.append(input, number, keyButton); field.append(caption, output, pair); row.append(field);
       input.addEventListener('pointerdown', () => recordUndo(), { passive: true });
-      input.addEventListener('input', () => { setSelectedVideoFxField(control, Number(input.value)); update(); applyVideoFx(videoFxAtPlayhead(selection.clip)); });
+      number.addEventListener('focus', () => recordUndo());
+      input.addEventListener('input', () => update(input.value));
+      number.addEventListener('change', () => update(number.value));
+      keyButton.addEventListener('click', () => addVideoFxFieldKeyframe(control));
     }
     for (const option of info?.options || []) {
       if (option.type === 'checkboxes') {
@@ -3078,6 +3417,38 @@ codexFxButtons.addEventListener('click', (event) => {
   ensureVideoFx(selection.clip);
   openVideoEventFxPanel(selection);
   renderVideoFxBrowser();
+});
+sapphirePluginButtons.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-sapphire-plugin]');
+  const selection = selectedVideoClip();
+  if (!button || button.disabled || !selection) return;
+  const plugin = installedSapphirePlugins().find(item => item.key === button.dataset.sapphirePlugin);
+  if (!plugin) return;
+  recordUndo();
+  const fx = ensureVideoFx(selection.clip);
+  const key = 'sapphire:' + plugin.key;
+  const existingLegacyKey = 'directx:' + plugin.key;
+  const effects = [...fx.effects];
+  if (effects.includes(key) || effects.includes(existingLegacyKey)) {
+    for (const removeKey of [key, existingLegacyKey]) { const index = effects.indexOf(removeKey); if (index >= 0) effects.splice(index, 1); }
+  } else effects.push(key);
+  setSelectedVideoFxField('effects', effects);
+  applyVideoFx(videoFxAtPlayhead(selection.clip));
+  renderTracks(); openVideoEventFxPanel(selection);
+});
+sapphireEffectButtons.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-sapphire-effect]');
+  const selection = selectedVideoClip();
+  if (!button || button.disabled || !selection) return;
+  const fx = ensureVideoFx(selection.clip);
+  const id = button.dataset.sapphireEffect;
+  recordUndo();
+  const effects = [...fx.sapphireEffects];
+  const index = effects.indexOf(id);
+  if (index >= 0) effects.splice(index, 1); else effects.push(id);
+  setSelectedVideoFxField('sapphireEffects', effects);
+  applyVideoFx(videoFxAtPlayhead(selection.clip));
+  renderTracks(); renderVideoFxBrowser();
 });
 directxFxButtons.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-directx]');
@@ -3340,4 +3711,16 @@ timelineBody.addEventListener('scroll', () => { rulerScale.style.transform = `tr
 window.addEventListener('resize', updateTimelineScale);
 mediaGrid.addEventListener('dragover', (event) => event.preventDefault());
 mediaGrid.addEventListener('drop', (event) => { event.preventDefault(); if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files); });
+let lastTouchContextTap = null;
+document.addEventListener('pointerup', (event) => {
+  if (event.pointerType !== 'touch') return;
+  const target = event.target.closest('.timeline-clip, .track-lane, .media-card');
+  if (!target || event.target.closest('.media-thumb')) return;
+  const now = performance.now();
+  if (lastTouchContextTap && lastTouchContextTap.target === target && now - lastTouchContextTap.time < 420 && Math.hypot(event.clientX - lastTouchContextTap.x, event.clientY - lastTouchContextTap.y) < 32) {
+    event.preventDefault();
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: event.clientX, clientY: event.clientY }));
+    lastTouchContextTap = null;
+  } else lastTouchContextTap = { target, time: now, x: event.clientX, y: event.clientY };
+}, true);
 renderTracks(); updateUndoButtons();
