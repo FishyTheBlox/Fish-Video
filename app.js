@@ -259,7 +259,7 @@ function renderInstalledWax() {
     const icon = document.createElement('img');
     icon.src = entry.isSapphire || entry.key?.startsWith('sapphire|')
       ? 'assets/genarts-sapphire.png'
-      : entry.category === 'VST (Audio)' ? 'assets/fish-video-icon.png' : 'assets/wax-plugin.png';
+      : entry.category === 'VST (Audio)' ? 'fish-video-icon.png' : 'assets/wax-plugin.png';
     icon.alt = '';
     const copy = document.createElement('div');
     copy.className = 'installed-copy';
